@@ -41,10 +41,21 @@ vignettes/*.pdf
 .env
 
 # pkgdown site
-docs/
+# docs/  (desactivado: en este proyecto docs/ contiene la documentación)
 
 # translation temp files
 po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Datos de investigación (nunca subir al repositorio)
+data/raw/
+data/processed/
+
+# Archivos de salida grandes
+output/
+
+# Archivos sensibles o de configuración local
+.Renviron
+*.credentials
