@@ -28,14 +28,23 @@ PL-seminario2-repo/
 │   ├── 01_importacion_revision.R   # Importación y revisión inicial de datos
 │   └── diccionario_variables.R     # Construcción del diccionario de variables
 │
-├── output/
+├── output/                         # Productos analíticos (no incluidos en el repositorio)
 │   ├── figures/                    # Figuras generadas por el código
 │   └── tables/                     # Tablas generadas por el código
 │
 └── docs/
     ├── diccionario_variables.csv   # Diccionario de variables del proyecto
-    └── fuentes_datos.md            # Descripción de la fuente de datos
+    ├── fuentes_datos.md            # Descripción de la fuente de datos
+    └── session_info.txt            # Versiones de R y paquetes (generado por el script 01)
 ```
+
+Cada tipo de archivo tiene su carpeta:
+
+- **Datos crudos** (`data/raw/`): la base del curso tal como se descargó. Es de solo lectura.
+- **Datos procesados** (`data/processed/`): la base analítica que genera el código a partir de los datos crudos.
+- **Código** (`code/`): scripts numerados en orden de ejecución.
+- **Productos analíticos** (`output/`): figuras y tablas generadas por el código.
+- **Documentación** (`docs/`): diccionario de variables, fuentes de datos y versiones de los paquetes.
 
 ## Requisitos
 
@@ -45,6 +54,7 @@ Este proyecto fue desarrollado con R versión 4.6.1. Los paquetes requeridos son
 - rmarkdown
 - here
 - skimr
+- sessioninfo
 
 ## Cómo reproducir el análisis
 
@@ -64,6 +74,19 @@ Observaciones al ejecutar `code/01_importacion_revision.R` (2026-10-09):
 - **¿El número de faltantes es coherente con lo descrito en el diccionario?** Sí. La pérdida de seguimiento es de 12.3% al mes 12 y 18.0% al mes 24. Entre los participantes no perdidos, los faltantes adicionales de laboratorio son de 4.3-5.0% al mes 12 y 4.7-7.0% al mes 24. Cuando no hubo pérdida, `motivo_perdida_m12` y `motivo_perdida_m24` se leen como cadena vacía (`""`), no como `NA`.
 
 Estos valores se corregirán en la semana de limpieza de datos, sin modificar `data/raw/`.
+
+## Transformaciones previstas para la base analítica
+
+La base analítica se construirá con `code/02_limpieza_preparacion.R` a partir de `data/raw/base_erc_cohorte.csv`, sin modificar el archivo original. Cada decisión quedará comentada en el código y, si es compleja, en un memo en `docs/`.
+
+1. **Valores imposibles de creatinina basal:** revisar ERC-0058, ERC-0064 y ERC-0122. El valor de ERC-0064 se convertirá de µmol/L a mg/dL (142 / 88.4 = 1.61 mg/dL). Los otros dos se corregirán si la revisión confirma un error de digitación; si no, quedarán como faltantes.
+2. **Peso basal incoherente:** revisar ERC-0234 y ERC-0152 frente al IMC y la talla registrados. El peso se corregirá solo si el error es verificable; si no, quedará como faltante.
+3. **Faltantes codificados como texto:** convertir la cadena vacía de `motivo_perdida_m12` y `motivo_perdida_m24` a `NA`.
+4. **Tipos de variables:** convertir `fecha_reclutamiento` (DD/MM/AAAA) a fecha; las variables categóricas a factores, con orden para `estadio_basal` (G2 < G3a < G3b < G4) y `nivel_educativo`; y las variables 0/1 a factores etiquetados.
+5. **Variables derivadas:** cambio de TFG entre la visita basal y los meses 12 y 24.
+6. **Datos faltantes:** describir el patrón de faltantes en el laboratorio de seguimiento y documentar en un memo el método elegido (casos completos o imputación).
+7. **Flujo de participantes:** registrar el número de participantes en cada etapa, incluidas las pérdidas de seguimiento a los meses 12 y 24.
+8. **Exportación:** guardar la base analítica en `data/processed/base_analitica_v1.0.rds` y agregar las variables derivadas al diccionario.
 
 ## Contacto
 
