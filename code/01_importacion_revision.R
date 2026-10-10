@@ -73,3 +73,15 @@ summary(base_raw[, c("edad", "tfg_ml_min_basal", "creatinina_mg_dl_basal",
 # - ¿Hay valores que parecen imposibles?
 # - ¿La distribución de las variables es la esperada?
 # - ¿El número de faltantes es coherente con lo descrito en el diccionario?
+
+# 7. INFORMACIÓN DE SESIÓN ------------------------------------------------
+
+# Registrar la versión de R y de los paquetes usados en esta revisión
+library(sessioninfo)
+session_info()
+
+# Guardar la información de sesión
+capture.output(
+  session_info(),
+  file = here("docs", "session_info.txt")
+)
