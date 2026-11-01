@@ -1,0 +1,93 @@
+MEMO: DECISIONES DE PREPARACIÓN DE DATOS
+Proyecto: Cohorte ERC — Seminario de Epiclínica II
+Fecha: 30/10/2026
+Autor: Pieralessandro Lasalvia
+
+Script: code/02_limpieza_preparacion.R
+Entrada: data/raw/base_erc_cohorte.csv (300 x 47, no se modifica)
+Salida: data/processed/base_analitica_v1.0.rds y .csv (300 x 57)
+
+═══════════════════════════════════════════════════
+0. SEUDONIMIZACIÓN
+═══════════════════════════════════════════════════
+  id_estudio (ERC-XXXX) ya es un seudónimo y se conserva para el
+  análisis. En una base real, la tabla de correspondencia con la
+  identidad se guardaría aparte, con acceso restringido.
+  fecha_reclutamiento puede identificar si se combina con otras
+  variables: se reemplaza por dias_desde_inicio (días desde el
+  15/01/2022) y se elimina la fecha exacta.
+
+═══════════════════════════════════════════════════
+1. CORRECCIÓN DE VALORES ATÍPICOS
+═══════════════════════════════════════════════════
+CREATININA BASAL (creatinina_mg_dl_basal):
+  ERC-0058: valor original 0.08 → valor corregido 0.84
+    Justificación: error de punto decimal; 0.08 mg/dL es imposible.
+  ERC-0064: valor original 142 → valor corregido 1.61
+    Justificación: registrado en µmol/L (142 / 88.4 = 1.61 mg/dL).
+  ERC-0122: valor original 18.5 → valor corregido 2.86 (revisión manual)
+    Justificación: con 18.5 mg/dL su TFG sería cercana a 3, no 25. Se
+    recalcula despejando la creatinina de la ecuación CKD-EPI 2021 con
+    su TFG (25), edad (56) y sexo (hombre):
+    Cr = 0.9 × (25 / (142 × 0.9938^56))^(-1/1.2) = 2.86 mg/dL.
+    Su creatinina al mes 12 es 4.33.
+
+PESO BASAL (peso_kg_basal):
+  ERC-0234: valor original 8.5 → valor corregido 49.9 (revisión manual)
+    Justificación: imposible para un adulto. Se recalcula con su IMC y
+    talla registrados: 20.5 × 1.56² = 49.9 kg (peso al mes 12: 47.4).
+  ERC-0152: valor original 198 → valor corregido 52.2 (revisión manual)
+    Justificación: incoherente con su IMC registrado (22.9) y con su
+    peso al mes 12 (42.9). Se recalcula igual: 22.9 × 1.51² = 52.2 kg.
+  En el resto de la base el IMC registrado coincide con peso/talla²,
+  por eso el recálculo es confiable.
+
+TFG BASAL (tfg_ml_min_basal):
+  ERC-0007 (14), ERC-0145 (14), ERC-0219 (13) → 15 (revisión manual)
+    Justificación: están registrados como G4 (TFG 15-29). Se llevan al
+    límite inferior del estadio para que TFG y estadio sean coherentes.
+    No se reclasifican a G5; el valor original queda en motivo_revision
+    y los tres se marcan para revisión manual contra la fuente. El
+    cambio y la tasa de declive de TFG se calculan con el valor ajustado.
+
+REVISIÓN MANUAL:
+  Los 6 participantes con valores recalculados o ajustados quedan
+  marcados con revision_manual = TRUE; motivo_revision indica el valor
+  original y el cambio.
+  También se marcan 6 participantes de G4 que llegan a TFG < 15 en el
+  seguimiento sin desenlace registrado (ERC-0007, 0017, 0039, 0065,
+  0158, 0182): el desenlace podría no estar registrado. ERC-0007 ya
+  estaba marcado por su TFG basal. Total marcados: 11.
+
+═══════════════════════════════════════════════════
+2. VARIABLES DERIVADAS CREADAS
+═══════════════════════════════════════════════════
+  - imc_calculado: peso/talla², con el peso corregido
+  - grupo_edad: categorización de edad en 4 grupos
+  - estadio_agrupado: G2-G3a vs G3b-G4
+  - etiologia_agrupada: Diabética / Hipertensiva / Otras
+  - log_proteinuria_basal: log natural de proteinuria
+  - cambio_tfg_m12: diferencia TFG mes 12 - basal
+  - cambio_tfg_m24: diferencia TFG mes 24 - basal
+  - tasa_declive_tfg: declive anual de TFG (mL/min/año)
+  - anemia_basal: Hgb < 12 g/dL (mujeres) o < 13 g/dL (hombres)
+  - revision_manual, motivo_revision: marca de valores a revisar
+
+═══════════════════════════════════════════════════
+3. MANEJO DE DATOS FALTANTES
+═══════════════════════════════════════════════════
+  El motivo de pérdida vacío ("") se recodificó a NA.
+  Los faltantes de TFG al mes 12 son más frecuentes en G3b (20%) que en
+  los otros estadios (8-13%): patrón compatible con MAR por estadio.
+
+  No se realizó imputación en la base analítica v1.0.
+  Los análisis de casos completos excluirán los faltantes
+  según las variables de cada modelo específico.
+  Análisis de sensibilidad con imputación múltiple: pendiente.
+
+═══════════════════════════════════════════════════
+4. VARIABLES EXCLUIDAS
+═══════════════════════════════════════════════════
+  - imc_basal: reemplazado por imc_calculado
+  - discrepancia_imc: variable auxiliar de verificación
+  - fecha_reclutamiento: reemplazada por dias_desde_inicio
