@@ -103,14 +103,14 @@ Este proyecto fue desarrollado con R 4.6.1. Los paquetes requeridos son:
 - Manejo de datos y reportes: tidyverse, here, rmarkdown, sessioninfo, skimr, naniar, corrplot
 - Tablas: gtsummary, flextable, broom, broom.helpers, parameters
 - Modelos: survival, survminer, car, lmtest, ResourceSelection, logistf, coxphf
-- Figuras: patchwork
+- Figuras: patchwork, ragg
 
 ```r
 install.packages(c("tidyverse", "here", "rmarkdown", "sessioninfo", "skimr",
                    "naniar", "corrplot", "gtsummary", "flextable", "broom",
                    "broom.helpers", "parameters", "survival", "survminer",
                    "car", "lmtest", "ResourceSelection", "logistf", "coxphf",
-                   "patchwork"))
+                   "patchwork", "ragg"))
 ```
 
 Las versiones exactas usadas están al final de cada documento renderizado.

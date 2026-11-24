@@ -1,6 +1,6 @@
 ---
 title: "Factores asociados a la progresión de la enfermedad renal crónica"
-subtitle: "Análisis de una cohorte prospectiva de 300 participantes"
+subtitle: "Análisis de una cohorte prospectiva de `r nrow(readRDS(here::here('data', 'processed', 'base_analitica_v1.0.rds')))` participantes"
 author: "Pieralessandro Lasalvia"
 date: "`r Sys.Date()`"
 output:
@@ -129,6 +129,18 @@ logrank <- survdiff(Surv(tiempo_seguimiento_dias, progresion_g5_o_trr) ~ estadio
                     data = base_surv)
 p_logrank <- pchisq(logrank$chisq, df = length(logrank$n) - 1, lower.tail = FALSE)
 epv <- sum(base_log$progresion_g5_o_trr) / (length(coef(modelo_log)) - 1)
+n_revision <- sum(base$revision_manual)
+
+# Período de reclutamiento. La limpieza reemplazó la fecha por los días desde
+# el inicio del reclutamiento, el 15/01/2022 (docs/memo_preparacion_datos.txt).
+meses_es <- c("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+              "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+fechas_recl <- as.Date("2022-01-15") + range(base$dias_desde_inicio)
+mes_anio <- function(f) paste(meses_es[as.integer(format(f, "%m"))], "de", format(f, "%Y"))
+
+# TFG basal de G3b y declive anual necesario para llegar a G5 (< 15) en 2 años
+tfg_g3b <- range(base$tfg_ml_min_basal[base$estadio_basal == "G3b"])
+perdida_g5 <- tfg_g3b[1] - 15
 ```
 
 ---
@@ -171,7 +183,7 @@ covariables deben confirmarse en cohortes con más eventos.
 ## Fuente de datos y participantes
 
 Estudio de cohorte prospectiva con `r nrow(base)` adultos con ERC en estadios
-G2 a G4 al reclutamiento, reclutados entre enero de 2022 y julio de 2023 y
+G2 a G4 al reclutamiento, reclutados entre `r mes_anio(fechas_recl[1])` y `r mes_anio(fechas_recl[2])` y
 seguidos durante 24 meses. Cada participante tiene una medición basal y dos
 visitas de seguimiento, a los meses 12 y 24, con TFG estimada, creatinina,
 presión arterial, hemoglobina, albúmina, proteinuria y peso. Los criterios de
@@ -227,7 +239,7 @@ método de regularización que conserva la exposición, la referencia y las
 covariables del plan; sus intervalos de confianza y valores p se obtienen por
 perfil de verosimilitud penalizada. Las tablas de máxima verosimilitud usan
 intervalos de Wald. Se realizaron cuatro análisis de sensibilidad: exclusión de
-los 11 participantes con valores corregidos, una definición alternativa del
+los `r n_revision` participantes con valores corregidos, una definición alternativa del
 desenlace, la regularización de Firth y una exposición dicotómica (G4 frente a
 G2-G3b). El análisis se hizo en R `r paste(R.version$major, R.version$minor, sep = ".")`.
 
@@ -625,7 +637,7 @@ or_g4_s4 <- tidy_wald(modelo_s4, exponentiate = TRUE) %>%
 
 La asociación de G4 con la progresión se mantuvo en los cuatro análisis de
 sensibilidad (detalle en `code/07_validacion_resultados.html`). Al excluir a
-los 11 participantes con valores corregidos en la limpieza, el OR de Firth de
+los `r n_revision` participantes con valores corregidos en la limpieza, el OR de Firth de
 G4 fue `r ic(or_g4_s1$estimate, or_g4_s1$conf.low, or_g4_s1$conf.high)`. Con
 la definición alternativa del desenlace, que agrega `r nrow(nuevos_s2)` eventos
 en G4 no registrados como progresión, fue
@@ -646,8 +658,9 @@ particular el estadio G4, es el predictor dominante de progresión a G5 o TRR en
 ocurrieron en G4, y los tres modelos coinciden: mayor odds, mayor riesgo
 instantáneo y un declive más rápido de la TFG. Que G3a y G3b no difieran de G2
 también es coherente con la definición del desenlace. Un paciente en G3b, con
-una TFG de 30 a 44, necesitaría perder más de 15 mL/min/1.73 m² en dos años
-para llegar a G5, es decir, al menos 7.5 mL/min/1.73 m² por año, muy por
+una TFG basal de `r tfg_g3b[1]` a `r tfg_g3b[2]`, necesitaría perder más de
+`r perdida_g5` mL/min/1.73 m² en dos años para llegar a G5, es decir, al menos
+`r num(perdida_g5 / 2)` mL/min/1.73 m² por año, muy por
 encima del declive mediano observado de
 `r abs(median(base_lineal$tasa_declive_tfg))` mL/min/año.
 
@@ -751,9 +764,10 @@ ggsave(
 )
 
 # ggsurvplot combina la curva y la tabla de riesgo; se imprime en un
-# dispositivo PNG para conservar ambas.
-png(here("output", "figures", "figura_02_kaplan_meier.png"),
-    width = 9, height = 7, units = "in", res = 300)
+# dispositivo PNG para conservar ambas. ragg::agg_png registra los 300 DPI en
+# el archivo (png() en macOS lo guarda como 72 DPI aunque tenga la resolución).
+ragg::agg_png(here("output", "figures", "figura_02_kaplan_meier.png"),
+              width = 9, height = 7, units = "in", res = 300, background = "white")
 print(km_figura)
 invisible(dev.off())
 
