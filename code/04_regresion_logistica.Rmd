@@ -1,0 +1,238 @@
+---
+title: "Análisis de regresión logística — Cohorte ERC"
+subtitle: "Factores asociados a la progresión a G5 o TRR"
+author: "Pieralessandro Lasalvia"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: show
+---
+
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(here)
+library(gtsummary)
+library(broom)
+library(car)
+
+base <- readRDS(here("data", "processed", "base_analitica_v1.0.rds"))
+
+# estadio_basal se guardó como factor ordenado (G2 < G3a < G3b < G4).
+# En un modelo de regresión, un factor ordenado usa contrastes polinómicos
+# (.L, .Q, .C) y no compara cada estadio con G2. Se convierte a factor
+# nominal para que G2 sea la categoría de referencia, como pide el plan.
+base <- base %>%
+  mutate(estadio_basal = factor(estadio_basal, ordered = FALSE))
+
+# Base para análisis logístico: excluir sin información del desenlace
+base_log <- base %>%
+  filter(!is.na(progresion_g5_o_trr),
+         !is.na(estadio_basal),
+         !is.na(log_proteinuria_basal),
+         !is.na(hemoglobina_g_dl_basal))
+
+cat("N analítico:", nrow(base_log), "\n")
+cat("Eventos:", sum(base_log$progresion_g5_o_trr), "\n")
+cat("Tasa de eventos:", round(mean(base_log$progresion_g5_o_trr)*100,1), "%\n")
+cat("Categoría de referencia del estadio:", levels(base_log$estadio_basal)[1], "\n")
+
+# Intervalos de confianza de Wald para las tablas. Con separación, el
+# intervalo por perfil de verosimilitud (opción por defecto) no converge y
+# devuelve límites sin sentido; el de Wald muestra el límite como 0 o Inf.
+tidy_wald <- function(x, ...) {
+  broom.helpers::tidy_parameters(x, ..., ci_method = "wald")
+}
+```
+
+# Plan de análisis
+
+Pregunta de investigación: ¿cuáles son los factores basales asociados con la
+progresión de la enfermedad renal crónica en pacientes con estadios G2-G4?
+
+Este documento implementa el análisis 1 del plan: regresión logística para la
+progresión a G5 o TRR (sí/no), con el estadio basal como exposición principal
+(referencia G2) y ajuste por edad, sexo, diabetes, hipertensión arterial,
+log-proteinuria y hemoglobina basales.
+
+Ninguna de las variables del modelo tiene datos faltantes, así que el N
+analítico es la cohorte completa (`r nrow(base_log)` de `r nrow(base)`
+participantes).
+
+# Eventos por estadio
+
+```{r}
+base_log %>%
+  group_by(estadio_basal) %>%
+  summarise(
+    n         = n(),
+    eventos   = sum(progresion_g5_o_trr),
+    porcentaje = round(mean(progresion_g5_o_trr) * 100, 1)
+  ) %>%
+  knitr::kable(col.names = c("Estadio", "N", "Eventos", "% con progresión"),
+               caption = "Eventos de progresión a G5/TRR por estadio basal")
+
+eventos_g4 <- sum(base_log$progresion_g5_o_trr & base_log$estadio_basal == "G4")
+```
+
+De los `r sum(base_log$progresion_g5_o_trr)` eventos, `r eventos_g4` ocurren en
+G4. G2 y G3a no tienen ningún evento. Esta distribución anticipa un problema de
+estimación: cuando la categoría de referencia no tiene eventos, el OR de los
+demás estadios frente a G2 tiende a infinito (separación casi completa).
+
+# Modelo crudo
+
+```{r}
+# Modelo sin ajuste: estadio como única variable
+modelo_crudo <- glm(
+  progresion_g5_o_trr ~ estadio_basal,
+  data   = base_log,
+  family = binomial(link = "logit")
+)
+```
+
+```{r, warning=FALSE}
+# gtsummary reajusta el modelo internamente y glm.fit advierte que hay
+# probabilidades ajustadas iguales a 0 o 1 (separación). Se omiten aquí.
+tbl_regression(modelo_crudo,
+               exponentiate = TRUE,
+               tidy_fun = tidy_wald,
+               label = list(estadio_basal ~ "Estadio de ERC (ref: G2)")) %>%
+  bold_p(t = 0.05) %>%
+  bold_labels() %>%
+  modify_caption("**Tabla 1. OR crudos para progresión a G5/TRR**")
+```
+
+```{r}
+# Coeficientes en la escala logit y sus errores estándar
+tidy(modelo_crudo) %>%
+  mutate(across(where(is.numeric), ~ signif(., 3))) %>%
+  knitr::kable(caption = "Coeficientes del modelo crudo (escala logit)")
+```
+
+```{r}
+# Probabilidad ajustada máxima por estadio: en G2 y G3a es prácticamente 0
+tapply(fitted(modelo_crudo), base_log$estadio_basal, max) %>%
+  signif(3)
+```
+
+**Interpretación de los OR crudos.** La probabilidad de progresión aumenta con
+el estadio, pero los OR crudos no se pueden interpretar como magnitudes. G3a no
+tiene eventos, igual que G2, y su OR frente a G2 queda indeterminado. G3b tiene
+un solo evento y G4 tiene `r eventos_g4`; sus coeficientes en la escala logit
+son enormes y sus errores estándar superan en varios órdenes de magnitud al
+propio coeficiente. Son el resultado de un algoritmo que no converge hacia un
+valor finito, no estimaciones del efecto. Lo que sí muestran los datos es un
+gradiente marcado: el desenlace es casi exclusivo de G4.
+
+# Modelo ajustado
+
+```{r}
+# Modelo con ajuste por covariables pre-especificadas
+modelo_ajustado <- glm(
+  progresion_g5_o_trr ~ estadio_basal + edad + sexo +
+    diabetes + hipertension +
+    log_proteinuria_basal + hemoglobina_g_dl_basal,
+  data   = base_log,
+  family = binomial(link = "logit")
+)
+cat("¿El algoritmo convergió?", modelo_ajustado$converged, "\n")
+```
+
+```{r, warning=FALSE}
+tbl_regression(modelo_ajustado,
+               exponentiate = TRUE,
+               tidy_fun = tidy_wald,
+               label = list(
+                 estadio_basal          ~ "Estadio de ERC (ref: G2)",
+                 edad                   ~ "Edad (por año)",
+                 sexo                   ~ "Sexo (ref: femenino)",
+                 diabetes               ~ "Diabetes mellitus",
+                 hipertension           ~ "Hipertensión arterial",
+                 log_proteinuria_basal  ~ "Log-proteinuria (por unidad)",
+                 hemoglobina_g_dl_basal ~ "Hemoglobina (por g/dL)"
+               )) %>%
+  add_global_p() %>%
+  bold_p(t = 0.05) %>%
+  bold_labels() %>%
+  modify_caption("**Tabla 2. OR ajustados para progresión a G5/TRR**")
+```
+
+```{r, warning=FALSE}
+# Valores para la interpretación (OR con IC de Wald, como en la Tabla 2)
+or_aj <- tidy_wald(modelo_ajustado, exponentiate = TRUE) %>%
+  filter(!grepl("estadio|Intercept", term))
+p_estadio <- Anova(modelo_ajustado, type = "II")["estadio_basal", "Pr(>Chisq)"]
+n_param   <- length(coef(modelo_ajustado)) - 1
+epv       <- sum(base_log$progresion_g5_o_trr) / n_param
+or_hta    <- or_aj %>% filter(term == "hipertensionTRUE")
+```
+
+**Interpretación de los OR ajustados.** El ajuste no resuelve el problema del
+estadio: los OR de G3b y G4 frente a G2 siguen sin ser finitos. La prueba de
+razón de verosimilitud global del estadio sí es válida y confirma una asociación
+fuerte con la progresión (p `r format.pval(p_estadio, digits = 2, eps = 0.001)`).
+Edad, sexo, diabetes, log-proteinuria y hemoglobina no muestran asociación
+independiente. La única covariable con p < 0.05 es la hipertensión arterial,
+con un OR de `r round(or_hta$estimate, 2)` (IC 95%
+`r sprintf("%.2f", or_hta$conf.low)`-`r sprintf("%.2f", or_hta$conf.high)`). Un efecto
+protector de la hipertensión no es plausible: `r round(mean(base_log$hipertension) * 100)`%
+de la cohorte es hipertensa, así que el grupo de comparación es pequeño, y la
+estimación es más probablemente inestabilidad del modelo que un efecto real. El modelo estima `r n_param`
+parámetros con `r sum(base_log$progresion_g5_o_trr)` eventos, es decir
+`r round(epv, 1)` eventos por variable, por debajo de los 10 recomendados.
+Estos resultados son preliminares; la validación de la semana 15 evaluará
+alternativas de estimación.
+
+# Verificación de supuestos
+
+```{r}
+# Multicolinealidad
+# Con un factor de 4 niveles, car::vif() devuelve el VIF generalizado (GVIF)
+# en una matriz. Se usa la columna GVIF para comparar con los umbrales 5 y 10.
+cat("=== FACTOR DE INFLACIÓN DE LA VARIANZA (VIF) ===\n")
+vif_matriz  <- vif(modelo_ajustado)
+print(round(vif_matriz, 2))
+vif_valores <- setNames(vif_matriz[, "GVIF"], rownames(vif_matriz))
+cat("\nVIF máximo:", round(max(vif_valores), 2), "\n")
+cat("Interpretación:",
+    ifelse(max(vif_valores) < 5, "Sin evidencia de colinealidad relevante",
+    ifelse(max(vif_valores) < 10, "Colinealidad moderada — revisar",
+           "Colinealidad severa — acción requerida")), "\n")
+```
+
+```{r}
+# Bondad de ajuste — Hosmer-Lemeshow
+library(ResourceSelection)
+hl_test <- hoslem.test(
+  base_log$progresion_g5_o_trr,
+  fitted(modelo_ajustado),
+  g = 10
+)
+cat("Prueba de Hosmer-Lemeshow:\n")
+cat("Chi-cuadrado =", round(hl_test$statistic, 2), "\n")
+cat("p-valor =", round(hl_test$p.value, 3), "\n")
+cat("Interpretación:",
+    ifelse(hl_test$p.value > 0.05,
+           "Ajuste adecuado del modelo (p > 0.05)",
+           "Posible falta de ajuste (p < 0.05) — revisar especificación"),
+    "\n")
+```
+
+**Resultado de la verificación de supuestos.** No hay multicolinealidad: el
+VIF máximo es `r round(max(vif_valores), 2)`, lejos del umbral de 5. La prueba
+de Hosmer-Lemeshow no muestra falta de ajuste (p = `r round(hl_test$p.value, 3)`),
+pero este resultado se lee con cautela: en G2 y G3a las probabilidades ajustadas
+son prácticamente cero y coinciden con lo observado, lo que infla el ajuste
+aparente. El problema principal del modelo no es un supuesto sino la separación
+del estadio y el bajo número de eventos por variable, que se documentan en
+`docs/memo_decisiones_analiticas.txt`.
+
+# Información de sesión
+
+```{r}
+sessioninfo::session_info()
+```
