@@ -97,6 +97,33 @@ distribución es unimodal y aproximadamente simétrica, con pocos valores
 positivos en la cola derecha, lo que es compatible con el supuesto de normalidad de los residuos que se verifica más
 abajo.
 
+# Modelo crudo
+
+```{r}
+# Modelo sin ajuste: estadio como única variable
+modelo_crudo <- lm(tasa_declive_tfg ~ estadio_basal, data = base_lineal)
+
+tbl_regression(modelo_crudo,
+               label = list(estadio_basal ~ "Estadio de ERC (ref: G2)")) %>%
+  bold_p(t = 0.05) %>%
+  bold_labels() %>%
+  modify_caption("**Tabla. Coeficientes crudos para tasa de declive de TFG**")
+
+coef_crudo <- broom::tidy(modelo_crudo, conf.int = TRUE)
+b_crudo <- function(term) coef_crudo$estimate[coef_crudo$term == term]
+media_g2 <- b_crudo("(Intercept)")
+```
+
+**Interpretación de los coeficientes crudos.** El intercepto es el declive medio
+de G2: `r sprintf("%.1f", media_g2)` mL/min/año. G4 declina
+`r sprintf("%.1f", abs(b_crudo("estadio_basalG4")))` mL/min/año más rápido que
+G2, mientras que G3a y G3b no difieren (diferencias de
+`r sprintf("%.2f", b_crudo("estadio_basalG3a"))` y
+`r sprintf("%.2f", b_crudo("estadio_basalG3b"))` mL/min/año). La asociación no
+aumenta de forma gradual con el estadio: se concentra en G4. El estadio solo
+explica el `r round(summary(modelo_crudo)$r.squared * 100, 1)`% de la
+variabilidad del declive.
+
 # Modelo ajustado
 
 ```{r}
@@ -135,7 +162,8 @@ r2 <- summary(modelo_lineal)$r.squared
 **Interpretación de los coeficientes.** Un coeficiente negativo indica un
 declive más rápido que la categoría de referencia. G4 es el único estadio que
 difiere de G2: pierde `r sprintf("%.1f", abs(b("estadio_basalG4")))` mL/min/año
-más. G3a y G3b declinan al mismo ritmo que G2 (diferencias de
+más, frente a `r sprintf("%.1f", abs(b_crudo("estadio_basalG4")))` en el modelo
+crudo, así que el ajuste casi no cambia la asociación. G3a y G3b declinan al mismo ritmo que G2 (diferencias de
 `r sprintf("%.2f", b("estadio_basalG3a"))` y
 `r sprintf("%.2f", b("estadio_basalG3b"))` mL/min/año). La diabetes se asocia
 con un declive `r sprintf("%.1f", abs(b("diabetesTRUE")))` mL/min/año más

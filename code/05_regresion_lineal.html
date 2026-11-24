@@ -1718,45 +1718,30 @@ distribución es unimodal y aproximadamente simétrica, con pocos valores
 positivos en la cola derecha, lo que es compatible con el supuesto de
 normalidad de los residuos que se verifica más abajo.</p>
 </div>
-<div id="modelo-ajustado" class="section level1" number="3">
-<h1><span class="header-section-number">3</span> Modelo ajustado</h1>
-<pre class="r"><code>modelo_lineal &lt;- lm(
-  tasa_declive_tfg ~ estadio_basal + edad + sexo +
-    diabetes + hipertension +
-    log_proteinuria_basal + hemoglobina_g_dl_basal +
-    pas_mmhg_basal + ieca_o_ara2,
-  data = base_lineal
-)
+<div id="modelo-crudo" class="section level1" number="3">
+<h1><span class="header-section-number">3</span> Modelo crudo</h1>
+<pre class="r"><code># Modelo sin ajuste: estadio como única variable
+modelo_crudo &lt;- lm(tasa_declive_tfg ~ estadio_basal, data = base_lineal)
 
-tbl_regression(modelo_lineal,
-               label = list(
-                 estadio_basal          ~ &quot;Estadio de ERC (ref: G2)&quot;,
-                 edad                   ~ &quot;Edad (por año)&quot;,
-                 sexo                   ~ &quot;Sexo (ref: femenino)&quot;,
-                 diabetes               ~ &quot;Diabetes mellitus&quot;,
-                 hipertension           ~ &quot;Hipertensión arterial&quot;,
-                 log_proteinuria_basal  ~ &quot;Log-proteinuria (por unidad)&quot;,
-                 hemoglobina_g_dl_basal ~ &quot;Hemoglobina (por g/dL)&quot;,
-                 pas_mmhg_basal         ~ &quot;PAS (por mmHg)&quot;,
-                 ieca_o_ara2            ~ &quot;IECA o ARA2&quot;
-               )) %&gt;%
+tbl_regression(modelo_crudo,
+               label = list(estadio_basal ~ &quot;Estadio de ERC (ref: G2)&quot;)) %&gt;%
   bold_p(t = 0.05) %&gt;%
   bold_labels() %&gt;%
-  modify_caption(&quot;**Tabla. Coeficientes ajustados para tasa de declive de TFG**&quot;)</code></pre>
-<div id="qjyvkhdatv" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
-<style>#qjyvkhdatv table {
+  modify_caption(&quot;**Tabla. Coeficientes crudos para tasa de declive de TFG**&quot;)</code></pre>
+<div id="tsroveondk" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#tsroveondk table {
 font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 -webkit-font-smoothing: antialiased;
 -moz-osx-font-smoothing: grayscale;
 }
-#qjyvkhdatv thead, #qjyvkhdatv tbody, #qjyvkhdatv tfoot, #qjyvkhdatv tr, #qjyvkhdatv td, #qjyvkhdatv th {
+#tsroveondk thead, #tsroveondk tbody, #tsroveondk tfoot, #tsroveondk tr, #tsroveondk td, #tsroveondk th {
 border-style: none;
 }
-#qjyvkhdatv p {
+#tsroveondk p {
 margin: 0;
 padding: 0;
 }
-#qjyvkhdatv .gt_table {
+#tsroveondk .gt_table {
 display: table;
 border-collapse: collapse;
 line-height: normal;
@@ -1781,11 +1766,11 @@ border-left-style: none;
 border-left-width: 2px;
 border-left-color: #D3D3D3;
 }
-#qjyvkhdatv .gt_caption {
+#tsroveondk .gt_caption {
 padding-top: 4px;
 padding-bottom: 4px;
 }
-#qjyvkhdatv .gt_title {
+#tsroveondk .gt_title {
 color: #333333;
 font-size: 125%;
 font-weight: initial;
@@ -1796,7 +1781,7 @@ padding-right: 5px;
 border-bottom-color: #FFFFFF;
 border-bottom-width: 0;
 }
-#qjyvkhdatv .gt_subtitle {
+#tsroveondk .gt_subtitle {
 color: #333333;
 font-size: 85%;
 font-weight: initial;
@@ -1807,7 +1792,7 @@ padding-right: 5px;
 border-top-color: #FFFFFF;
 border-top-width: 0;
 }
-#qjyvkhdatv .gt_heading {
+#tsroveondk .gt_heading {
 background-color: #FFFFFF;
 text-align: center;
 border-bottom-color: #FFFFFF;
@@ -1818,12 +1803,12 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#qjyvkhdatv .gt_bottom_border {
+#tsroveondk .gt_bottom_border {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#qjyvkhdatv .gt_col_headings {
+#tsroveondk .gt_col_headings {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -1837,7 +1822,7 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#qjyvkhdatv .gt_col_heading {
+#tsroveondk .gt_col_heading {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -1856,7 +1841,7 @@ padding-left: 5px;
 padding-right: 5px;
 overflow-x: hidden;
 }
-#qjyvkhdatv .gt_column_spanner_outer {
+#tsroveondk .gt_column_spanner_outer {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -1867,13 +1852,13 @@ padding-bottom: 0;
 padding-left: 4px;
 padding-right: 4px;
 }
-#qjyvkhdatv .gt_column_spanner_outer:first-child {
+#tsroveondk .gt_column_spanner_outer:first-child {
 padding-left: 0;
 }
-#qjyvkhdatv .gt_column_spanner_outer:last-child {
+#tsroveondk .gt_column_spanner_outer:last-child {
 padding-right: 0;
 }
-#qjyvkhdatv .gt_column_spanner {
+#tsroveondk .gt_column_spanner {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
@@ -1884,10 +1869,10 @@ overflow-x: hidden;
 display: inline-block;
 width: 100%;
 }
-#qjyvkhdatv .gt_spanner_row {
+#tsroveondk .gt_spanner_row {
 border-bottom-style: hidden;
 }
-#qjyvkhdatv .gt_group_heading {
+#tsroveondk .gt_group_heading {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -1912,7 +1897,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 text-align: left;
 }
-#qjyvkhdatv .gt_empty_group_heading {
+#tsroveondk .gt_empty_group_heading {
 padding: 0.5px;
 color: #333333;
 background-color: #FFFFFF;
@@ -1926,13 +1911,13 @@ border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 vertical-align: middle;
 }
-#qjyvkhdatv .gt_from_md > :first-child {
+#tsroveondk .gt_from_md > :first-child {
 margin-top: 0;
 }
-#qjyvkhdatv .gt_from_md > :last-child {
+#tsroveondk .gt_from_md > :last-child {
 margin-bottom: 0;
 }
-#qjyvkhdatv .gt_row {
+#tsroveondk .gt_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -1950,7 +1935,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 overflow-x: hidden;
 }
-#qjyvkhdatv .gt_stub {
+#tsroveondk .gt_stub {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -1962,7 +1947,7 @@ border-right-color: #D3D3D3;
 padding-left: 5px;
 padding-right: 5px;
 }
-#qjyvkhdatv .gt_stub_row_group {
+#tsroveondk .gt_stub_row_group {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -1975,13 +1960,13 @@ padding-left: 5px;
 padding-right: 5px;
 vertical-align: top;
 }
-#qjyvkhdatv .gt_row_group_first td {
+#tsroveondk .gt_row_group_first td {
 border-top-width: 2px;
 }
-#qjyvkhdatv .gt_row_group_first th {
+#tsroveondk .gt_row_group_first th {
 border-top-width: 2px;
 }
-#qjyvkhdatv .gt_summary_row {
+#tsroveondk .gt_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -1990,14 +1975,14 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#qjyvkhdatv .gt_first_summary_row {
+#tsroveondk .gt_first_summary_row {
 border-top-style: solid;
 border-top-color: #D3D3D3;
 }
-#qjyvkhdatv .gt_first_summary_row.thick {
+#tsroveondk .gt_first_summary_row.thick {
 border-top-width: 2px;
 }
-#qjyvkhdatv .gt_last_summary_row {
+#tsroveondk .gt_last_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2006,7 +1991,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#qjyvkhdatv .gt_grand_summary_row {
+#tsroveondk .gt_grand_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -2015,7 +2000,7 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#qjyvkhdatv .gt_first_grand_summary_row {
+#tsroveondk .gt_first_grand_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2024,7 +2009,7 @@ border-top-style: double;
 border-top-width: 6px;
 border-top-color: #D3D3D3;
 }
-#qjyvkhdatv .gt_last_grand_summary_row_top {
+#tsroveondk .gt_last_grand_summary_row_top {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2033,10 +2018,10 @@ border-bottom-style: double;
 border-bottom-width: 6px;
 border-bottom-color: #D3D3D3;
 }
-#qjyvkhdatv .gt_striped {
+#tsroveondk .gt_striped {
 background-color: rgba(128, 128, 128, 0.05);
 }
-#qjyvkhdatv .gt_table_body {
+#tsroveondk .gt_table_body {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -2044,7 +2029,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#qjyvkhdatv .gt_footnotes {
+#tsroveondk .gt_footnotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -2057,7 +2042,7 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#qjyvkhdatv .gt_footnote {
+#tsroveondk .gt_footnote {
 margin: 0px;
 font-size: 90%;
 padding-top: 4px;
@@ -2065,7 +2050,7 @@ padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#qjyvkhdatv .gt_sourcenotes {
+#tsroveondk .gt_sourcenotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -2078,64 +2063,534 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#qjyvkhdatv .gt_sourcenote {
+#tsroveondk .gt_sourcenote {
 font-size: 90%;
 padding-top: 4px;
 padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#qjyvkhdatv .gt_left {
+#tsroveondk .gt_left {
 text-align: left;
 }
-#qjyvkhdatv .gt_center {
+#tsroveondk .gt_center {
 text-align: center;
 }
-#qjyvkhdatv .gt_right {
+#tsroveondk .gt_right {
 text-align: right;
 font-variant-numeric: tabular-nums;
 }
-#qjyvkhdatv .gt_font_normal {
+#tsroveondk .gt_font_normal {
 font-weight: normal;
 }
-#qjyvkhdatv .gt_font_bold {
+#tsroveondk .gt_font_bold {
 font-weight: bold;
 }
-#qjyvkhdatv .gt_font_italic {
+#tsroveondk .gt_font_italic {
 font-style: italic;
 }
-#qjyvkhdatv .gt_super {
+#tsroveondk .gt_super {
 font-size: 65%;
 }
-#qjyvkhdatv .gt_footnote_marks {
+#tsroveondk .gt_footnote_marks {
 font-size: 75%;
 vertical-align: 0.4em;
 position: initial;
 }
-#qjyvkhdatv .gt_asterisk {
+#tsroveondk .gt_asterisk {
 font-size: 100%;
 vertical-align: 0;
 }
-#qjyvkhdatv .gt_indent_1 {
+#tsroveondk .gt_indent_1 {
 text-indent: 5px;
 }
-#qjyvkhdatv .gt_indent_2 {
+#tsroveondk .gt_indent_2 {
 text-indent: 10px;
 }
-#qjyvkhdatv .gt_indent_3 {
+#tsroveondk .gt_indent_3 {
 text-indent: 15px;
 }
-#qjyvkhdatv .gt_indent_4 {
+#tsroveondk .gt_indent_4 {
 text-indent: 20px;
 }
-#qjyvkhdatv .gt_indent_5 {
+#tsroveondk .gt_indent_5 {
 text-indent: 25px;
 }
-#qjyvkhdatv .katex-display {
+#tsroveondk .katex-display {
 display: inline-flex !important;
 margin-bottom: 0.75em !important;
 }
-#qjyvkhdatv div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+#tsroveondk div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+height: 0px !important;
+}
+</style>
+<table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false">
+  <caption><span class="gt_from_md"><strong>Tabla. Coeficientes crudos para tasa de declive de TFG</strong></span></caption>
+  <thead>
+    <tr class="gt_col_headings">
+      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" scope="col" id="label"><span class="gt_from_md"><strong>Characteristic</strong></span></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" scope="col" id="estimate"><span class="gt_from_md"><strong>Beta</strong></span></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" scope="col" id="conf.low"><span class="gt_from_md"><strong>95% CI</strong></span></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" scope="col" id="p.value"><span class="gt_from_md"><strong>p-value</strong></span></th>
+    </tr>
+  </thead>
+  <tbody class="gt_table_body">
+    <tr><td headers="label" class="gt_row gt_left" style="font-weight: bold;">Estadio de ERC (ref: G2)</td>
+<td headers="estimate" class="gt_row gt_center"><br /></td>
+<td headers="conf.low" class="gt_row gt_center"><br /></td>
+<td headers="p.value" class="gt_row gt_center"><br /></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    G2</td>
+<td headers="estimate" class="gt_row gt_center">—</td>
+<td headers="conf.low" class="gt_row gt_center">—</td>
+<td headers="p.value" class="gt_row gt_center"><br /></td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    G3a</td>
+<td headers="estimate" class="gt_row gt_center">0.04</td>
+<td headers="conf.low" class="gt_row gt_center">-0.76, 0.83</td>
+<td headers="p.value" class="gt_row gt_center">&gt;0.9</td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    G3b</td>
+<td headers="estimate" class="gt_row gt_center">-0.11</td>
+<td headers="conf.low" class="gt_row gt_center">-0.95, 0.73</td>
+<td headers="p.value" class="gt_row gt_center">0.8</td></tr>
+    <tr><td headers="label" class="gt_row gt_left">    G4</td>
+<td headers="estimate" class="gt_row gt_center">-1.9</td>
+<td headers="conf.low" class="gt_row gt_center">-2.8, -0.96</td>
+<td headers="p.value" class="gt_row gt_center" style="font-weight: bold;">&lt;0.001</td></tr>
+  </tbody>
+  <tfoot>
+    <tr class="gt_sourcenotes">
+      <td class="gt_sourcenote" colspan="4"><span class="gt_from_md">Abbreviation: CI = Confidence Interval</span></td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+<pre class="r"><code>coef_crudo &lt;- broom::tidy(modelo_crudo, conf.int = TRUE)
+b_crudo &lt;- function(term) coef_crudo$estimate[coef_crudo$term == term]
+media_g2 &lt;- b_crudo(&quot;(Intercept)&quot;)</code></pre>
+<p><strong>Interpretación de los coeficientes crudos.</strong> El
+intercepto es el declive medio de G2: -3.8 mL/min/año. G4 declina 1.9
+mL/min/año más rápido que G2, mientras que G3a y G3b no difieren
+(diferencias de 0.04 y -0.11 mL/min/año). La asociación no aumenta de
+forma gradual con el estadio: se concentra en G4. El estadio solo
+explica el 9% de la variabilidad del declive.</p>
+</div>
+<div id="modelo-ajustado" class="section level1" number="4">
+<h1><span class="header-section-number">4</span> Modelo ajustado</h1>
+<pre class="r"><code>modelo_lineal &lt;- lm(
+  tasa_declive_tfg ~ estadio_basal + edad + sexo +
+    diabetes + hipertension +
+    log_proteinuria_basal + hemoglobina_g_dl_basal +
+    pas_mmhg_basal + ieca_o_ara2,
+  data = base_lineal
+)
+
+tbl_regression(modelo_lineal,
+               label = list(
+                 estadio_basal          ~ &quot;Estadio de ERC (ref: G2)&quot;,
+                 edad                   ~ &quot;Edad (por año)&quot;,
+                 sexo                   ~ &quot;Sexo (ref: femenino)&quot;,
+                 diabetes               ~ &quot;Diabetes mellitus&quot;,
+                 hipertension           ~ &quot;Hipertensión arterial&quot;,
+                 log_proteinuria_basal  ~ &quot;Log-proteinuria (por unidad)&quot;,
+                 hemoglobina_g_dl_basal ~ &quot;Hemoglobina (por g/dL)&quot;,
+                 pas_mmhg_basal         ~ &quot;PAS (por mmHg)&quot;,
+                 ieca_o_ara2            ~ &quot;IECA o ARA2&quot;
+               )) %&gt;%
+  bold_p(t = 0.05) %&gt;%
+  bold_labels() %&gt;%
+  modify_caption(&quot;**Tabla. Coeficientes ajustados para tasa de declive de TFG**&quot;)</code></pre>
+<div id="wgnyvwigyz" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#wgnyvwigyz table {
+font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+}
+#wgnyvwigyz thead, #wgnyvwigyz tbody, #wgnyvwigyz tfoot, #wgnyvwigyz tr, #wgnyvwigyz td, #wgnyvwigyz th {
+border-style: none;
+}
+#wgnyvwigyz p {
+margin: 0;
+padding: 0;
+}
+#wgnyvwigyz .gt_table {
+display: table;
+border-collapse: collapse;
+line-height: normal;
+margin-left: auto;
+margin-right: auto;
+color: #333333;
+font-size: 16px;
+font-weight: normal;
+font-style: normal;
+background-color: #FFFFFF;
+width: auto;
+border-top-style: solid;
+border-top-width: 2px;
+border-top-color: #A8A8A8;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #A8A8A8;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+}
+#wgnyvwigyz .gt_caption {
+padding-top: 4px;
+padding-bottom: 4px;
+}
+#wgnyvwigyz .gt_title {
+color: #333333;
+font-size: 125%;
+font-weight: initial;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-color: #FFFFFF;
+border-bottom-width: 0;
+}
+#wgnyvwigyz .gt_subtitle {
+color: #333333;
+font-size: 85%;
+font-weight: initial;
+padding-top: 3px;
+padding-bottom: 5px;
+padding-left: 5px;
+padding-right: 5px;
+border-top-color: #FFFFFF;
+border-top-width: 0;
+}
+#wgnyvwigyz .gt_heading {
+background-color: #FFFFFF;
+text-align: center;
+border-bottom-color: #FFFFFF;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+}
+#wgnyvwigyz .gt_bottom_border {
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+}
+#wgnyvwigyz .gt_col_headings {
+border-top-style: solid;
+border-top-width: 2px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+}
+#wgnyvwigyz .gt_col_heading {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: normal;
+text-transform: inherit;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: bottom;
+padding-top: 5px;
+padding-bottom: 6px;
+padding-left: 5px;
+padding-right: 5px;
+overflow-x: hidden;
+}
+#wgnyvwigyz .gt_column_spanner_outer {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: normal;
+text-transform: inherit;
+padding-top: 0;
+padding-bottom: 0;
+padding-left: 4px;
+padding-right: 4px;
+}
+#wgnyvwigyz .gt_column_spanner_outer:first-child {
+padding-left: 0;
+}
+#wgnyvwigyz .gt_column_spanner_outer:last-child {
+padding-right: 0;
+}
+#wgnyvwigyz .gt_column_spanner {
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+vertical-align: bottom;
+padding-top: 5px;
+padding-bottom: 5px;
+overflow-x: hidden;
+display: inline-block;
+width: 100%;
+}
+#wgnyvwigyz .gt_spanner_row {
+border-bottom-style: hidden;
+}
+#wgnyvwigyz .gt_group_heading {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-top-style: solid;
+border-top-width: 2px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: middle;
+text-align: left;
+}
+#wgnyvwigyz .gt_empty_group_heading {
+padding: 0.5px;
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+border-top-style: solid;
+border-top-width: 2px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+vertical-align: middle;
+}
+#wgnyvwigyz .gt_from_md > :first-child {
+margin-top: 0;
+}
+#wgnyvwigyz .gt_from_md > :last-child {
+margin-bottom: 0;
+}
+#wgnyvwigyz .gt_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+margin: 10px;
+border-top-style: solid;
+border-top-width: 1px;
+border-top-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: middle;
+overflow-x: hidden;
+}
+#wgnyvwigyz .gt_stub {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-right-style: solid;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+padding-left: 5px;
+padding-right: 5px;
+}
+#wgnyvwigyz .gt_stub_row_group {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-right-style: solid;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+padding-left: 5px;
+padding-right: 5px;
+vertical-align: top;
+}
+#wgnyvwigyz .gt_row_group_first td {
+border-top-width: 2px;
+}
+#wgnyvwigyz .gt_row_group_first th {
+border-top-width: 2px;
+}
+#wgnyvwigyz .gt_summary_row {
+color: #333333;
+background-color: #FFFFFF;
+text-transform: inherit;
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#wgnyvwigyz .gt_first_summary_row {
+border-top-style: solid;
+border-top-color: #D3D3D3;
+}
+#wgnyvwigyz .gt_first_summary_row.thick {
+border-top-width: 2px;
+}
+#wgnyvwigyz .gt_last_summary_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+}
+#wgnyvwigyz .gt_grand_summary_row {
+color: #333333;
+background-color: #FFFFFF;
+text-transform: inherit;
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#wgnyvwigyz .gt_first_grand_summary_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-top-style: double;
+border-top-width: 6px;
+border-top-color: #D3D3D3;
+}
+#wgnyvwigyz .gt_last_grand_summary_row_top {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-style: double;
+border-bottom-width: 6px;
+border-bottom-color: #D3D3D3;
+}
+#wgnyvwigyz .gt_striped {
+background-color: rgba(128, 128, 128, 0.05);
+}
+#wgnyvwigyz .gt_table_body {
+border-top-style: solid;
+border-top-width: 2px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+}
+#wgnyvwigyz .gt_footnotes {
+color: #333333;
+background-color: #FFFFFF;
+border-bottom-style: none;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+}
+#wgnyvwigyz .gt_footnote {
+margin: 0px;
+font-size: 90%;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#wgnyvwigyz .gt_sourcenotes {
+color: #333333;
+background-color: #FFFFFF;
+border-bottom-style: none;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+}
+#wgnyvwigyz .gt_sourcenote {
+font-size: 90%;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#wgnyvwigyz .gt_left {
+text-align: left;
+}
+#wgnyvwigyz .gt_center {
+text-align: center;
+}
+#wgnyvwigyz .gt_right {
+text-align: right;
+font-variant-numeric: tabular-nums;
+}
+#wgnyvwigyz .gt_font_normal {
+font-weight: normal;
+}
+#wgnyvwigyz .gt_font_bold {
+font-weight: bold;
+}
+#wgnyvwigyz .gt_font_italic {
+font-style: italic;
+}
+#wgnyvwigyz .gt_super {
+font-size: 65%;
+}
+#wgnyvwigyz .gt_footnote_marks {
+font-size: 75%;
+vertical-align: 0.4em;
+position: initial;
+}
+#wgnyvwigyz .gt_asterisk {
+font-size: 100%;
+vertical-align: 0;
+}
+#wgnyvwigyz .gt_indent_1 {
+text-indent: 5px;
+}
+#wgnyvwigyz .gt_indent_2 {
+text-indent: 10px;
+}
+#wgnyvwigyz .gt_indent_3 {
+text-indent: 15px;
+}
+#wgnyvwigyz .gt_indent_4 {
+text-indent: 20px;
+}
+#wgnyvwigyz .gt_indent_5 {
+text-indent: 25px;
+}
+#wgnyvwigyz .katex-display {
+display: inline-flex !important;
+margin-bottom: 0.75em !important;
+}
+#wgnyvwigyz div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
 height: 0px !important;
 }
 </style>
@@ -2248,19 +2703,21 @@ b &lt;- function(term) coef_lin$estimate[coef_lin$term == term]
 r2 &lt;- summary(modelo_lineal)$r.squared</code></pre>
 <p><strong>Interpretación de los coeficientes.</strong> Un coeficiente
 negativo indica un declive más rápido que la categoría de referencia. G4
-es el único estadio que difiere de G2: pierde 2.0 mL/min/año más. G3a y
-G3b declinan al mismo ritmo que G2 (diferencias de 0.05 y -0.05
-mL/min/año). La diabetes se asocia con un declive 0.7 mL/min/año más
-rápido, en la dirección esperada. El uso de IECA o ARA2 también se
-asocia con un declive más rápido (-0.9 mL/min/año), lo contrario del
-efecto nefroprotector conocido. En un estudio observacional esto sugiere
-confusión por indicación: los IECA y ARA2 se prescriben a pacientes con
-más proteinuria o enfermedad más activa. Edad, sexo, hipertensión,
-log-proteinuria, hemoglobina y PAS no muestran asociación. El modelo
-explica el 15.1% de la variabilidad del declive.</p>
+es el único estadio que difiere de G2: pierde 2.0 mL/min/año más, frente
+a 1.9 en el modelo crudo, así que el ajuste casi no cambia la
+asociación. G3a y G3b declinan al mismo ritmo que G2 (diferencias de
+0.05 y -0.05 mL/min/año). La diabetes se asocia con un declive 0.7
+mL/min/año más rápido, en la dirección esperada. El uso de IECA o ARA2
+también se asocia con un declive más rápido (-0.9 mL/min/año), lo
+contrario del efecto nefroprotector conocido. En un estudio
+observacional esto sugiere confusión por indicación: los IECA y ARA2 se
+prescriben a pacientes con más proteinuria o enfermedad más activa.
+Edad, sexo, hipertensión, log-proteinuria, hemoglobina y PAS no muestran
+asociación. El modelo explica el 15.1% de la variabilidad del
+declive.</p>
 </div>
-<div id="verificación-de-supuestos" class="section level1" number="4">
-<h1><span class="header-section-number">4</span> Verificación de
+<div id="verificación-de-supuestos" class="section level1" number="5">
+<h1><span class="header-section-number">5</span> Verificación de
 supuestos</h1>
 <pre class="r"><code># Cuatro gráficos diagnósticos
 par(mfrow = c(2, 2))
@@ -2299,8 +2756,8 @@ determina los coeficientes. Los VIF son bajos, sin colinealidad
 relevante. La semana 15 complementa esta inspección con pruebas formales
 (Breusch-Pagan y Shapiro-Wilk).</p>
 </div>
-<div id="información-de-sesión" class="section level1" number="5">
-<h1><span class="header-section-number">5</span> Información de
+<div id="información-de-sesión" class="section level1" number="6">
+<h1><span class="header-section-number">6</span> Información de
 sesión</h1>
 <pre class="r"><code>sessioninfo::session_info()</code></pre>
 <pre><code>## ─ Session info ───────────────────────────────────────────────────────────────
