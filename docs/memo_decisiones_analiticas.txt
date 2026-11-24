@@ -1,0 +1,96 @@
+MEMO: DECISIONES ANALÍTICAS
+Proyecto: Cohorte ERC — Seminario de Epiclínica II
+Fecha: 24/11/2026
+Autor: Pieralessandro Lasalvia
+
+Documentos: code/04_regresion_logistica.Rmd, code/05_regresion_lineal.Rmd,
+            code/06_analisis_supervivencia.Rmd
+Entrada: data/processed/base_analitica_v1.0.rds (300 x 57)
+
+Pregunta de investigación: ¿cuáles son los factores basales asociados con
+la progresión de la ERC en pacientes con estadios G2-G4?
+
+═══════════════════════════════════════════════════
+1. SELECCIÓN DE COVARIABLES
+═══════════════════════════════════════════════════
+  Las covariables del modelo ajustado fueron pre-especificadas según los
+  factores de riesgo conocidos para progresión de ERC. No se realizó
+  selección automática por pasos.
+  - Logístico y Cox: edad, sexo, diabetes, hipertensión arterial,
+    log-proteinuria y hemoglobina basales.
+  - Lineal: las anteriores más PAS basal y uso de IECA o ARA2.
+
+═══════════════════════════════════════════════════
+2. MANEJO DE DATOS FALTANTES EN EL ANÁLISIS
+═══════════════════════════════════════════════════
+  Se utilizó análisis de casos completos para los modelos principales.
+  - Logístico (N = 300) y Cox (N = 300): ninguna variable del modelo
+    tiene faltantes; no se excluye a nadie.
+  - Lineal (N = 246): se excluyen 54 participantes (18.0%) sin TFG al
+    mes 24, porque sin ella no se puede calcular la tasa de declive.
+    Los excluidos son similares a los incluidos en edad (mediana 57 vs
+    58 años), sexo (50.0% vs 52.8% mujeres), diabetes (40.7% en ambos),
+    hipertensión (85.2% vs 86.6%), TFG basal (44 vs 45) y hemoglobina
+    (11.4 vs 11.6 g/dL). Hay proporcionalmente más G3b entre los
+    excluidos (38.9% vs 26.0%), sin diferencia significativa en la
+    distribución por estadio (chi-cuadrado, p = 0.22).
+  El supuesto MCAR es plausible pero no verificable; se registra como
+  limitación.
+
+═══════════════════════════════════════════════════
+3. TRANSFORMACIÓN DE PROTEINURIA
+═══════════════════════════════════════════════════
+  Se utilizó la transformación logarítmica (log natural) dado su
+  distribución fuertemente sesgada positivamente. Los coeficientes se
+  interpretan por unidad de log(proteinuria).
+
+═══════════════════════════════════════════════════
+4. CATEGORÍA DE REFERENCIA
+═══════════════════════════════════════════════════
+  Estadio G2 como referencia en todos los modelos.
+  En la base analítica estadio_basal es un factor ordenado
+  (G2 < G3a < G3b < G4). En un modelo de regresión eso produce
+  contrastes polinómicos (.L, .Q, .C) en vez de comparaciones contra G2.
+  Cada documento convierte el estadio a factor nominal al cargar la base,
+  sin modificar el archivo en data/processed/.
+  Sexo: la referencia es femenino (primer nivel del factor); el
+  coeficiente corresponde a sexo masculino. Las tablas lo rotulan
+  "Sexo (ref: femenino)".
+
+═══════════════════════════════════════════════════
+5. RESULTADOS DE VERIFICACIÓN DE SUPUESTOS
+═══════════════════════════════════════════════════
+  REGRESIÓN LOGÍSTICA (N = 300, 33 eventos)
+  - VIF: máximo 1.47 (estadio, GVIF). Sin colinealidad.
+  - Hosmer-Lemeshow: chi-cuadrado = 1.25, 8 gl, p = 0.996. Sin falta de
+    ajuste, aunque el resultado está inflado porque G2 y G3a tienen
+    probabilidad ajustada cercana a 0 y ningún evento.
+  - Separación casi completa del estadio: 0 eventos en G2 (0/69) y G3a
+    (0/93), 1 en G3b (1/85) y 32 en G4 (32/53). Los OR de G3b y G4 frente
+    a G2 no son finitos (valores del orden de 10^6 a 10^9 e IC de 0 a
+    infinito). La prueba de razón de verosimilitud global del estadio sí
+    es válida (p < 0.001).
+  - Eventos por variable: 33 eventos / 9 parámetros = 3.7, por debajo de
+    10. La hipertensión aparece con OR 0.09 (IC 95% 0.01-0.95), un efecto
+    protector no plausible atribuible a la inestabilidad del modelo.
+  - Las tablas usan IC de Wald: el IC por perfil de verosimilitud no
+    converge con separación.
+
+  REGRESIÓN LINEAL (N = 246)
+  - Gráficos diagnósticos: residuos sin patrón, Q-Q sobre la diagonal,
+    Scale-Location horizontal. Distancia de Cook máxima 0.056.
+  - VIF: máximo 1.12 (estadio, GVIF). Sin colinealidad.
+
+  MODELO DE COX (N = 300, 33 eventos)
+  - Schoenfeld: sin violación de riesgos proporcionales (p global =
+    0.428). La variable más cercana al umbral es log-proteinuria
+    (p = 0.066).
+  - El mismo problema de separación del modelo logístico: R advierte que
+    la verosimilitud converge antes que los coeficientes de G3b y G4
+    ("coefficient may be infinite"). Log-rank por estadio: chi-cuadrado =
+    192.1, 3 gl, p < 0.001.
+
+  PENDIENTE PARA LA SEMANA 15
+  Evaluar alternativas para la separación y el bajo EPV: el material del
+  curso propone reducir el número de covariables o usar métodos de
+  regularización.
