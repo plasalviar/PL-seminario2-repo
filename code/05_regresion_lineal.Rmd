@@ -1,0 +1,186 @@
+---
+title: "Análisis de regresión lineal — Cohorte ERC"
+subtitle: "Factores asociados a la tasa de declive de la TFG"
+author: "Pieralessandro Lasalvia"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: show
+---
+
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(here)
+library(gtsummary)
+library(car)
+
+base <- readRDS(here("data", "processed", "base_analitica_v1.0.rds"))
+
+# Estadio como factor nominal con G2 como referencia (ver 04_regresion_logistica.Rmd)
+base <- base %>%
+  mutate(estadio_basal = factor(estadio_basal, ordered = FALSE))
+
+base_lineal <- base %>%
+  filter(!is.na(tasa_declive_tfg),
+         !is.na(estadio_basal),
+         !is.na(log_proteinuria_basal))
+
+cat("N analítico:", nrow(base_lineal), "\n")
+cat("Tasa de declive (mediana):",
+    round(median(base_lineal$tasa_declive_tfg, na.rm=TRUE), 1),
+    "mL/min/año\n")
+```
+
+# Plan de análisis
+
+Este documento implementa el análisis 2 del plan: regresión lineal para la tasa
+de declive de la TFG (mL/min/año), con el estadio basal como exposición
+principal (referencia G2) y ajuste por edad, sexo, diabetes, hipertensión
+arterial, log-proteinuria, hemoglobina, presión arterial sistólica (PAS) y uso
+de IECA o ARA2.
+
+La tasa de declive se calcula con la TFG del mes 24, así que solo existe para
+quien completó el seguimiento. Se excluyen
+`r nrow(base) - nrow(base_lineal)` participantes
+(`r round((nrow(base) - nrow(base_lineal)) / nrow(base) * 100, 1)`%) sin TFG al
+mes 24; las demás variables del modelo no tienen faltantes. La tabla siguiente
+compara el estadio basal de incluidos y excluidos.
+
+```{r}
+# ¿Difieren los excluidos de los incluidos en el estadio basal?
+base %>%
+  mutate(incluido = if_else(is.na(tasa_declive_tfg),
+                            "Excluido (sin TFG mes 24)", "Incluido")) %>%
+  count(incluido, estadio_basal) %>%
+  group_by(incluido) %>%
+  mutate(pct = round(n / sum(n) * 100, 1)) %>%
+  pivot_wider(names_from = incluido, values_from = c(n, pct)) %>%
+  knitr::kable(caption = "Estadio basal de los participantes incluidos y excluidos")
+
+p_exclusion <- chisq.test(table(is.na(base$tasa_declive_tfg),
+                                base$estadio_basal))$p.value
+```
+
+Entre los excluidos hay proporcionalmente más participantes en G3b y menos en
+G3a y G4 que entre los incluidos, aunque la diferencia en la distribución por
+estadio no es estadísticamente significativa (chi-cuadrado,
+p = `r round(p_exclusion, 2)`). El análisis de casos completos supone que los
+faltantes son completamente al azar (MCAR); con este patrón el supuesto es
+plausible pero no verificable, y se registra como limitación.
+
+# Distribución del desenlace
+
+```{r}
+ggplot(base_lineal, aes(x = tasa_declive_tfg)) +
+  geom_histogram(bins = 30, fill = "#2E75B6", color = "white", alpha = 0.8) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Distribución de la tasa de declive de la TFG",
+       subtitle = "Valores negativos = declive (progresión); valores positivos = mejoría",
+       x = "Tasa de declive (mL/min/año)",
+       y = "Frecuencia") +
+  theme_minimal()
+```
+
+```{r}
+pct_declive <- mean(base_lineal$tasa_declive_tfg < 0) * 100
+q_declive   <- quantile(base_lineal$tasa_declive_tfg, c(0.25, 0.5, 0.75))
+```
+
+**Distribución.** El `r round(pct_declive, 1)`% de los participantes tiene una
+tasa negativa, es decir, pierde función renal durante el seguimiento. La mediana
+es `r q_declive[2]` mL/min/año (RIQ `r q_declive[1]` a `r q_declive[3]`). La
+distribución es unimodal y aproximadamente simétrica, con pocos valores
+positivos en la cola derecha, lo que es compatible con el supuesto de normalidad de los residuos que se verifica más
+abajo.
+
+# Modelo ajustado
+
+```{r}
+modelo_lineal <- lm(
+  tasa_declive_tfg ~ estadio_basal + edad + sexo +
+    diabetes + hipertension +
+    log_proteinuria_basal + hemoglobina_g_dl_basal +
+    pas_mmhg_basal + ieca_o_ara2,
+  data = base_lineal
+)
+
+tbl_regression(modelo_lineal,
+               label = list(
+                 estadio_basal          ~ "Estadio de ERC (ref: G2)",
+                 edad                   ~ "Edad (por año)",
+                 sexo                   ~ "Sexo (ref: femenino)",
+                 diabetes               ~ "Diabetes mellitus",
+                 hipertension           ~ "Hipertensión arterial",
+                 log_proteinuria_basal  ~ "Log-proteinuria (por unidad)",
+                 hemoglobina_g_dl_basal ~ "Hemoglobina (por g/dL)",
+                 pas_mmhg_basal         ~ "PAS (por mmHg)",
+                 ieca_o_ara2            ~ "IECA o ARA2"
+               )) %>%
+  bold_p(t = 0.05) %>%
+  bold_labels() %>%
+  modify_caption("**Tabla. Coeficientes ajustados para tasa de declive de TFG**")
+```
+
+```{r}
+# Valores para la interpretación
+coef_lin <- broom::tidy(modelo_lineal, conf.int = TRUE)
+b <- function(term) coef_lin$estimate[coef_lin$term == term]
+r2 <- summary(modelo_lineal)$r.squared
+```
+
+**Interpretación de los coeficientes.** Un coeficiente negativo indica un
+declive más rápido que la categoría de referencia. G4 es el único estadio que
+difiere de G2: pierde `r sprintf("%.1f", abs(b("estadio_basalG4")))` mL/min/año
+más. G3a y G3b declinan al mismo ritmo que G2 (diferencias de
+`r sprintf("%.2f", b("estadio_basalG3a"))` y
+`r sprintf("%.2f", b("estadio_basalG3b"))` mL/min/año). La diabetes se asocia
+con un declive `r sprintf("%.1f", abs(b("diabetesTRUE")))` mL/min/año más
+rápido, en la dirección esperada. El uso de IECA o ARA2 también se asocia con un
+declive más rápido (`r sprintf("%.1f", b("ieca_o_ara2TRUE"))` mL/min/año), lo
+contrario del efecto nefroprotector conocido. En un estudio observacional esto
+sugiere confusión por indicación: los IECA y ARA2 se prescriben a pacientes con
+más proteinuria o enfermedad más activa. Edad, sexo, hipertensión,
+log-proteinuria, hemoglobina y PAS no muestran asociación. El modelo explica el
+`r round(r2 * 100, 1)`% de la variabilidad del declive.
+
+# Verificación de supuestos
+
+```{r, fig.height=7, fig.width=8}
+# Cuatro gráficos diagnósticos
+par(mfrow = c(2, 2))
+plot(modelo_lineal)
+par(mfrow = c(1, 1))
+```
+
+```{r}
+cat("VIF del modelo lineal:\n")
+print(round(vif(modelo_lineal), 2))
+```
+
+```{r}
+# Observaciones con mayor influencia (distancia de Cook)
+cook <- cooks.distance(modelo_lineal)
+cat("Distancia de Cook máxima:", round(max(cook), 3), "\n")
+cat("Observaciones con Cook > 4/n:", sum(cook > 4 / nobs(modelo_lineal)), "\n")
+```
+
+**Interpretación de los gráficos diagnósticos.** En *Residuals vs Fitted* los
+residuos se reparten alrededor de cero; la línea de suavizado se curva un poco
+en los valores ajustados más bajos, donde hay pocos puntos, sin un patrón en U
+ni en embudo. El *Q-Q plot* sigue la diagonal en todo su recorrido, incluidas
+las colas. En *Scale-Location* la línea es casi horizontal, así que no hay
+evidencia visual de heterocedasticidad. En *Residuals vs Leverage* las líneas
+de distancia de Cook de 0.5 ni siquiera entran en el gráfico: la distancia
+máxima es `r round(max(cook), 3)`. Ningún caso individual determina los coeficientes. Los
+VIF son bajos, sin colinealidad relevante. La semana 15 complementa esta
+inspección con pruebas formales (Breusch-Pagan y Shapiro-Wilk).
+
+# Información de sesión
+
+```{r}
+sessioninfo::session_info()
+```
