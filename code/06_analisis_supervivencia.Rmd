@@ -1,0 +1,216 @@
+---
+title: "Análisis de supervivencia — Cohorte ERC"
+subtitle: "Tiempo hasta la progresión a G5 o inicio de TRR"
+author: "Pieralessandro Lasalvia"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: show
+---
+
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(here)
+library(survival)
+library(survminer)
+library(gtsummary)
+
+base <- readRDS(here("data", "processed", "base_analitica_v1.0.rds"))
+
+# Estadio como factor nominal con G2 como referencia (ver 04_regresion_logistica.Rmd)
+base <- base %>%
+  mutate(estadio_basal = factor(estadio_basal, ordered = FALSE))
+
+base_surv <- base %>%
+  filter(!is.na(tiempo_seguimiento_dias),
+         !is.na(progresion_g5_o_trr))
+
+cat("N analítico:", nrow(base_surv), "\n")
+cat("Eventos:", sum(base_surv$progresion_g5_o_trr), "\n")
+cat("Tiempo mediano de seguimiento:",
+    median(base_surv$tiempo_seguimiento_dias), "días\n")
+
+# Objeto de supervivencia
+surv_obj <- Surv(time  = base_surv$tiempo_seguimiento_dias,
+                 event = base_surv$progresion_g5_o_trr)
+
+# Intervalos de Wald para las tablas (ver 04_regresion_logistica.Rmd)
+tidy_wald <- function(x, ...) {
+  broom.helpers::tidy_parameters(x, ..., ci_method = "wald")
+}
+```
+
+# Plan de análisis
+
+Este documento implementa el análisis 3 del plan: tiempo hasta la progresión a
+G5 o inicio de TRR, con curvas de Kaplan-Meier por estadio basal y un modelo de
+Cox con el estadio como exposición principal (referencia G2), ajustado por edad,
+sexo, diabetes, hipertensión arterial, log-proteinuria y hemoglobina basales.
+El tiempo se cuenta desde el reclutamiento; quien no presenta el evento se
+censura en su última visita o al perderse en el seguimiento. Ninguna variable
+del modelo tiene faltantes: el N analítico es la cohorte completa.
+
+# Estimación de Kaplan-Meier
+
+```{r, fig.height=7, fig.width=9}
+# KM global
+km_global <- survfit(surv_obj ~ 1, data = base_surv)
+
+ggsurvplot(km_global,
+           data        = base_surv,
+           conf.int    = TRUE,
+           risk.table  = TRUE,
+           xlab        = "Tiempo (días)",
+           ylab        = "Probabilidad libre de progresión",
+           title       = "Curva de supervivencia global",
+           ggtheme     = theme_minimal(base_size = 13))
+```
+
+```{r, fig.height=7.5, fig.width=9}
+# KM por estadio
+km_estadio <- survfit(surv_obj ~ estadio_basal, data = base_surv)
+
+ggsurvplot(km_estadio,
+           data             = base_surv,
+           pval             = TRUE,
+           pval.method      = TRUE,
+           conf.int         = TRUE,
+           risk.table       = TRUE,
+           risk.table.height = 0.28,
+           palette          = c("#93C6E0","#4A90D9","#2E75B6","#1F5C99"),
+           legend.labs      = c("G2","G3a","G3b","G4"),
+           legend.title     = "Estadio de ERC",
+           xlab             = "Tiempo (días)",
+           ylab             = "Probabilidad libre de progresión",
+           title            = "Curvas de Kaplan-Meier por estadio basal de ERC",
+           ggtheme          = theme_minimal(base_size = 13))
+```
+
+```{r}
+# Valores para la interpretación
+km_24 <- summary(km_estadio, times = 720, extend = TRUE)
+surv_24 <- setNames(round(km_24$surv * 100, 1),
+                    sub("estadio_basal=", "", km_24$strata))
+mediana_g4 <- surv_median(km_estadio) %>%
+  filter(strata == "estadio_basal=G4") %>%
+  pull(median)
+logrank <- survdiff(surv_obj ~ estadio_basal, data = base_surv)
+p_logrank <- pchisq(logrank$chisq, df = length(logrank$n) - 1, lower.tail = FALSE)
+
+primer_evento_g4 <- base_surv %>%
+  filter(estadio_basal == "G4", progresion_g5_o_trr) %>%
+  summarise(min(tiempo_seguimiento_dias)) %>%
+  pull()
+
+tibble(Estadio = names(surv_24),
+       `Libre de progresión a 720 días (%)` = surv_24) %>%
+  knitr::kable(caption = "Probabilidad de Kaplan-Meier libre de progresión a 720 días")
+```
+
+**Interpretación de las curvas de Kaplan-Meier.** La progresión se concentra en
+G4: a los 720 días, la probabilidad de seguir libre de progresión es
+`r surv_24["G4"]`% en G4, frente a `r surv_24["G3b"]`% en G3b y 100% en G2 y
+G3a. La curva de G4 empieza a caer desde el primer evento (día
+`r primer_evento_g4`) y se separa de las demás durante todo el seguimiento; la
+mediana de tiempo hasta la progresión en G4 es de `r mediana_g4` días. Las
+curvas de G2 y G3a son planas porque no tienen eventos. La prueba de log-rank
+rechaza la igualdad de las curvas (chi-cuadrado =
+`r round(logrank$chisq, 1)`, `r length(logrank$n) - 1` gl,
+p `r format.pval(p_logrank, eps = 0.001)`).
+
+# Modelo de Cox
+
+```{r, warning=FALSE}
+# Modelo crudo
+cox_crudo <- coxph(surv_obj ~ estadio_basal, data = base_surv)
+
+tbl_regression(cox_crudo,
+               exponentiate = TRUE,
+               tidy_fun = tidy_wald,
+               label = list(estadio_basal ~ "Estadio (ref: G2)")) %>%
+  bold_p() %>% bold_labels() %>%
+  modify_caption("**Tabla. HR crudos — Modelo de Cox**")
+```
+
+```{r}
+# Modelo ajustado
+cox_ajustado <- coxph(
+  Surv(tiempo_seguimiento_dias, progresion_g5_o_trr) ~
+    estadio_basal + edad + sexo +
+    diabetes + hipertension +
+    log_proteinuria_basal + hemoglobina_g_dl_basal,
+  data = base_surv
+)
+```
+
+```{r, warning=FALSE}
+tbl_regression(cox_ajustado,
+               exponentiate = TRUE,
+               tidy_fun = tidy_wald,
+               label = list(
+                 estadio_basal          ~ "Estadio de ERC (ref: G2)",
+                 edad                   ~ "Edad (por año)",
+                 sexo                   ~ "Sexo (ref: femenino)",
+                 diabetes               ~ "Diabetes mellitus",
+                 hipertension           ~ "Hipertensión arterial",
+                 log_proteinuria_basal  ~ "Log-proteinuria (por unidad)",
+                 hemoglobina_g_dl_basal ~ "Hemoglobina (por g/dL)"
+               )) %>%
+  bold_p(t = 0.05) %>%
+  bold_labels() %>%
+  modify_caption("**Tabla. HR ajustados — Modelo de Cox**")
+```
+
+```{r}
+# Prueba de razón de verosimilitud del estadio en el modelo ajustado
+cox_sin_estadio <- update(cox_ajustado, . ~ . - estadio_basal)
+lrt_estadio <- anova(cox_sin_estadio, cox_ajustado)
+p_estadio_cox <- lrt_estadio[["Pr(>|Chi|)"]][2]
+lrt_estadio
+```
+
+**Interpretación de los HR ajustados.** El modelo de Cox reproduce el problema
+del modelo logístico. R advierte que la verosimilitud converge antes de que los
+coeficientes de G3b y G4 lo hagan ("coefficient may be infinite"): con cero
+eventos en G2, el HR de los estadios avanzados frente a G2 no es finito y la
+tabla muestra valores enormes con intervalos de 0 a infinito. La magnitud sí
+aumenta con el estadio, igual que con los OR del modelo logístico, y la prueba
+de razón de verosimilitud confirma que el estadio aporta al modelo
+(p `r format.pval(p_estadio_cox, eps = 0.001)`). Ninguna covariable muestra una
+asociación independiente con el tiempo hasta la progresión. El HR de la
+hipertensión ya no es significativo, lo que refuerza que el OR protector del
+modelo logístico era inestabilidad y no un efecto.
+
+# Verificación del supuesto de proporcionalidad
+
+```{r}
+ph_test <- cox.zph(cox_ajustado)
+cat("=== PRUEBA DE SCHOENFELD ===\n")
+print(ph_test)
+cat("\nInterpretación: p < 0.05 indica violación del supuesto",
+    "para esa variable\n")
+```
+
+```{r, fig.height=10, fig.width=10}
+ggcoxzph(ph_test)
+```
+
+**Resultado.** La prueba de Schoenfeld no muestra violación del supuesto de
+riesgos proporcionales en ninguna variable ni en la prueba global
+(p global = `r round(ph_test$table["GLOBAL", "p"], 3)`). La log-proteinuria
+es la variable más cercana al umbral
+(p = `r round(ph_test$table["log_proteinuria_basal", "p"], 3)`); si en un
+análisis posterior llegara a violarlo, la estrategia sería agregar una
+interacción con el tiempo (log-proteinuria × log(tiempo)). Para el estadio la
+prueba tiene poca información, porque casi todos los eventos ocurren en un solo
+estadio.
+
+# Información de sesión
+
+```{r}
+sessioninfo::session_info()
+```
