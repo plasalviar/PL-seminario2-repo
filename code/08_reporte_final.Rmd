@@ -1,0 +1,773 @@
+---
+title: "Factores asociados a la progresión de la enfermedad renal crónica"
+subtitle: "Análisis de una cohorte prospectiva de 300 participantes"
+author: "Pieralessandro Lasalvia"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    df_print: paged
+    code_folding: hide
+---
+
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+
+library(tidyverse)
+library(here)
+library(gtsummary)
+library(survival)
+library(survminer)
+library(patchwork)
+library(flextable)
+library(broom)
+library(logistf)
+library(coxphf)
+
+# Encabezados y notas de las tablas de gtsummary en español
+theme_gtsummary_language(language = "es", decimal.mark = ".", big.mark = ",")
+
+# Cargar base analítica
+base <- readRDS(here("data", "processed", "base_analitica_v1.0.rds"))
+
+# Estadio como factor nominal con G2 como referencia
+# (docs/memo_decisiones_analiticas.txt, sección 4)
+base <- base %>%
+  mutate(estadio_basal = factor(estadio_basal, ordered = FALSE))
+
+# Bases por análisis (casos completos en las variables de cada modelo)
+base_log <- base %>%
+  filter(!is.na(progresion_g5_o_trr),
+         !is.na(log_proteinuria_basal),
+         !is.na(hemoglobina_g_dl_basal))
+
+base_lineal <- base %>%
+  filter(!is.na(tasa_declive_tfg),
+         !is.na(log_proteinuria_basal))
+
+base_surv <- base %>%
+  filter(!is.na(tiempo_seguimiento_dias),
+         !is.na(progresion_g5_o_trr))
+
+# Modelos del plan de análisis (máxima verosimilitud)
+formula_log <- progresion_g5_o_trr ~ estadio_basal + edad + sexo +
+  diabetes + hipertension + log_proteinuria_basal + hemoglobina_g_dl_basal
+
+modelo_log <- glm(formula_log, data = base_log, family = binomial())
+
+modelo_lineal <- lm(
+  tasa_declive_tfg ~ estadio_basal + edad + sexo +
+    diabetes + hipertension +
+    log_proteinuria_basal + hemoglobina_g_dl_basal +
+    pas_mmhg_basal + ieca_o_ara2,
+  data = base_lineal
+)
+
+modelo_cox <- coxph(
+  Surv(tiempo_seguimiento_dias, progresion_g5_o_trr) ~
+    estadio_basal + edad + sexo +
+    diabetes + hipertension +
+    log_proteinuria_basal + hemoglobina_g_dl_basal,
+  data = base_surv
+)
+
+# Modelos con regularización de Firth (decisión de la validación, semana 15)
+modelo_log_firth <- logistf(formula_log, data = base_log)
+modelo_cox_firth <- coxphf(
+  Surv(tiempo_seguimiento_dias, progresion_g5_o_trr) ~
+    estadio_basal + edad + sexo +
+    diabetes + hipertension +
+    log_proteinuria_basal + hemoglobina_g_dl_basal,
+  data = base_surv
+)
+
+# Kaplan-Meier por estadio
+km_estadio <- survfit(Surv(tiempo_seguimiento_dias, progresion_g5_o_trr) ~ estadio_basal,
+                      data = base_surv)
+
+# Funciones auxiliares
+tidy_wald <- function(x, ...) {
+  broom.helpers::tidy_parameters(x, ..., ci_method = "wald")
+}
+tidy_firth <- function(modelo, ya_exponenciado_ic = FALSE) {
+  est <- coef(modelo)
+  tibble(
+    term      = names(est),
+    estimate  = exp(est),
+    conf.low  = if (ya_exponenciado_ic) modelo$ci.lower else exp(modelo$ci.lower),
+    conf.high = if (ya_exponenciado_ic) modelo$ci.upper else exp(modelo$ci.upper),
+    p.value   = modelo$prob
+  ) %>%
+    filter(term != "(Intercept)")
+}
+num <- function(x, d = 1) formatC(x, format = "f", digits = d, big.mark = ",")
+ic  <- function(est, lo, hi, d = 1) paste0(num(est, d), " (IC 95% ", num(lo, d), "-", num(hi, d), ")")
+pct <- function(x) num(mean(x, na.rm = TRUE) * 100)
+p_txt <- function(p) if (p < 0.001) "p < 0.001" else paste0("p = ", num(p, 3))
+
+# Valores que se citan en el texto
+firth_log <- tidy_firth(modelo_log_firth)
+firth_cox <- tidy_firth(modelo_cox_firth, ya_exponenciado_ic = TRUE)
+or_g4  <- firth_log %>% filter(term == "estadio_basalG4")
+hr_g4  <- firth_cox %>% filter(term == "estadio_basalG4")
+lin    <- tidy(modelo_lineal, conf.int = TRUE)
+b_lin  <- function(t) lin %>% filter(term == t)
+km_720 <- summary(km_estadio, times = 720, extend = TRUE)
+s720   <- setNames(km_720$surv * 100, sub("estadio_basal=", "", km_720$strata))
+s720_lo <- setNames(km_720$lower * 100, sub("estadio_basal=", "", km_720$strata))
+s720_hi <- setNames(km_720$upper * 100, sub("estadio_basal=", "", km_720$strata))
+eventos_estadio <- base %>% group_by(estadio_basal) %>%
+  summarise(n = n(), e = sum(progresion_g5_o_trr))
+ev <- function(g) eventos_estadio$e[eventos_estadio$estadio_basal == g]
+nn <- function(g) eventos_estadio$n[eventos_estadio$estadio_basal == g]
+logrank <- survdiff(Surv(tiempo_seguimiento_dias, progresion_g5_o_trr) ~ estadio_basal,
+                    data = base_surv)
+p_logrank <- pchisq(logrank$chisq, df = length(logrank$n) - 1, lower.tail = FALSE)
+epv <- sum(base_log$progresion_g5_o_trr) / (length(coef(modelo_log)) - 1)
+```
+
+---
+
+# Resumen
+
+**Antecedentes:** La progresión de la enfermedad renal crónica (ERC) hacia
+estadios avanzados o hacia terapia de reemplazo renal (TRR) representa una
+carga clínica y económica considerable. La identificación de factores basales
+asociados con la progresión permite orientar estrategias de seguimiento
+diferenciadas.
+
+**Objetivo:** Identificar los factores basales asociados con la progresión
+a estadio G5 o inicio de TRR en una cohorte de pacientes con ERC en estadios
+G2 a G4.
+
+**Métodos:** Cohorte prospectiva de `r nrow(base)` participantes seguidos
+durante 24 meses. Se ajustaron modelos de regresión logística, regresión
+lineal y análisis de supervivencia de Cox. Como ningún participante en G2
+presentó el desenlace, el efecto del estadio se estimó además con regresión
+penalizada de Firth.
+
+**Resultados:** El desenlace ocurrió en `r sum(base$progresion_g5_o_trr)`
+participantes (`r pct(base$progresion_g5_o_trr)`%), `r ev("G4")` de ellos en
+G4. A los 720 días, el `r num(s720["G4"])`% de G4 seguía libre de progresión,
+frente al `r num(s720["G3b"])`% de G3b y el 100% de G2 y G3a. Frente a G2, G4
+tuvo un OR de `r ic(or_g4$estimate, or_g4$conf.low, or_g4$conf.high)` y un HR
+de `r ic(hr_g4$estimate, hr_g4$conf.low, hr_g4$conf.high)`, y un declive de la
+TFG `r num(abs(b_lin("estadio_basalG4")$estimate))` mL/min/año más rápido.
+G3a y G3b no difirieron de G2. Ninguna otra covariable se asoció de forma
+estable con la progresión.
+
+**Conclusiones:** En esta cohorte, el estadio G4 al reclutamiento concentra
+casi todo el riesgo de progresión a G5 o TRR en 24 meses. La magnitud del
+efecto es imprecisa por el número de eventos, y las asociaciones de las demás
+covariables deben confirmarse en cohortes con más eventos.
+
+# Métodos
+
+## Fuente de datos y participantes
+
+Estudio de cohorte prospectiva con `r nrow(base)` adultos con ERC en estadios
+G2 a G4 al reclutamiento, reclutados entre enero de 2022 y julio de 2023 y
+seguidos durante 24 meses. Cada participante tiene una medición basal y dos
+visitas de seguimiento, a los meses 12 y 24, con TFG estimada, creatinina,
+presión arterial, hemoglobina, albúmina, proteinuria y peso. Los criterios de
+inclusión implícitos son la edad adulta y un estadio G2 a G4 al reclutamiento.
+La base es sintética: fue desarrollada para el curso con distribuciones
+realistas y no proviene de pacientes reales. La limpieza y la construcción de
+la base analítica se documentan en `docs/memo_preparacion_datos.txt`.
+
+## Variables
+
+**Desenlace primario:** Progresión a estadio G5 o inicio de TRR al mes 24
+del seguimiento, definida como una TFG estimada < 15 mL/min/1.73 m² en la
+última visita disponible o registro de inicio de diálisis o trasplante renal.
+
+**Exposición principal:** Estadio de ERC al reclutamiento según la
+clasificación KDIGO (G2: TFG 60-89; G3a: 45-59; G3b: 30-44; G4: 15-29
+mL/min/1.73 m²), con G2 como categoría de referencia.
+
+**Covariables de ajuste:** Edad, sexo, diabetes mellitus, hipertensión
+arterial, log-proteinuria basal y hemoglobina basal, seleccionadas según
+factores de riesgo establecidos para progresión de ERC.
+
+## Análisis estadístico
+
+Se describieron las características basales por estadio con mediana y rango
+intercuartílico (RIQ) o frecuencias, y se compararon con las pruebas de
+Kruskal-Wallis y chi-cuadrado. Se ajustaron tres modelos pre-especificados,
+sin selección de variables por pasos: (1) regresión logística para la
+progresión a G5/TRR a los 24 meses, ajustada por las covariables anteriores;
+(2) regresión lineal para la tasa anual de declive de la TFG, ajustada además
+por presión arterial sistólica y uso de IECA o ARA2; y (3) curvas de
+Kaplan-Meier con prueba de log-rank y un modelo de riesgos proporcionales de
+Cox para el tiempo hasta la progresión, con censura en la última visita o en
+la pérdida de seguimiento. La proteinuria se transformó con logaritmo natural
+por su asimetría positiva.
+
+Se usó análisis de casos completos. Los modelos logístico y de Cox incluyen a
+toda la cohorte; el modelo lineal excluye a
+`r nrow(base) - nrow(base_lineal)` participantes sin TFG al mes 24. Se
+verificaron los supuestos de cada modelo: multicolinealidad (VIF), bondad de
+ajuste (Hosmer-Lemeshow) y linealidad en la escala logit en el modelo
+logístico; normalidad y homocedasticidad de los residuos (gráficos
+diagnósticos, Shapiro-Wilk y Breusch-Pagan) en el lineal; y riesgos
+proporcionales (residuos de Schoenfeld) en el de Cox. Ninguno se violó
+(`code/07_validacion_resultados.html`).
+
+Ningún participante en G2 o G3a presentó el desenlace. Con una categoría de
+referencia sin eventos, la máxima verosimilitud no puede estimar los OR ni los
+HR del estadio (separación). Además, el modelo logístico tiene
+`r num(epv)` eventos por variable. Por eso el efecto del estadio se estimó
+también con regresión penalizada de Firth (paquetes logistf y coxphf), un
+método de regularización que conserva la exposición, la referencia y las
+covariables del plan; sus intervalos de confianza y valores p se obtienen por
+perfil de verosimilitud penalizada. Las tablas de máxima verosimilitud usan
+intervalos de Wald. Se realizaron cuatro análisis de sensibilidad: exclusión de
+los 11 participantes con valores corregidos, una definición alternativa del
+desenlace, la regularización de Firth y una exposición dicotómica (G4 frente a
+G2-G3b). El análisis se hizo en R `r paste(R.version$major, R.version$minor, sep = ".")`.
+
+# Resultados
+
+## Características basales
+
+La cohorte incluyó `r nrow(base)` participantes, con una mediana de edad de
+`r median(base$edad)` años (RIQ: `r quantile(base$edad, 0.25)`–`r quantile(base$edad, 0.75)`).
+El `r round(mean(base$sexo == "Femenino")*100, 1)`% eran mujeres. La
+distribución por estadio fue: G2 (`r sum(base$estadio_basal=="G2")`
+participantes, `r round(mean(base$estadio_basal=="G2")*100,1)`%), G3a
+(`r sum(base$estadio_basal=="G3a")`, `r round(mean(base$estadio_basal=="G3a")*100,1)`%),
+G3b (`r sum(base$estadio_basal=="G3b")`, `r round(mean(base$estadio_basal=="G3b")*100,1)`%)
+y G4 (`r sum(base$estadio_basal=="G4")`, `r round(mean(base$estadio_basal=="G4")*100,1)`%).
+
+```{r}
+med_por_estadio <- function(v) {
+  base %>% group_by(estadio_basal) %>%
+    summarise(m = median(.data[[v]], na.rm = TRUE)) %>%
+    deframe()
+}
+hb_est   <- med_por_estadio("hemoglobina_g_dl_basal")
+prot_est <- med_por_estadio("proteinuria_mg_g_basal")
+hb_otros <- hb_est[names(hb_est) != "G4"]
+```
+
+El `r pct(base$hipertension)`% tenía hipertensión arterial y el
+`r pct(base$diabetes)`% diabetes. La mediana de TFG basal fue
+`r median(base$tfg_ml_min_basal)` mL/min/1.73 m² y la de proteinuria
+`r num(median(base$proteinuria_mg_g_basal), 0)` mg/g. Por construcción, la
+TFG baja de un estadio a otro. La hemoglobina mediana es menor en G4
+(`r num(hb_est["G4"])` g/dL) que en los demás estadios
+(`r num(min(hb_otros))` a `r num(max(hb_otros))` g/dL), mientras que la
+proteinuria mediana es similar en todos (`r num(min(prot_est), 0)` a
+`r num(max(prot_est), 0)` mg/g). Edad, sexo, diabetes, hipertensión y uso de
+IECA o ARA2 no difieren entre estadios (Tabla 1).
+
+```{r}
+tabla_1 <- base %>%
+  select(estadio_basal, edad, sexo, etiologia_agrupada,
+         diabetes, hipertension, imc_calculado,
+         tfg_ml_min_basal, hemoglobina_g_dl_basal,
+         albumina_g_dl_basal, proteinuria_mg_g_basal,
+         ieca_o_ara2, n_medicamentos_totales) %>%
+  tbl_summary(
+    by = estadio_basal,
+    statistic = list(all_continuous()  ~ "{median} ({p25}–{p75})",
+                     all_categorical() ~ "{n} ({p}%)"),
+    digits    = list(all_continuous() ~ 1),
+    missing   = "no",
+    label = list(
+      edad                   ~ "Edad (años)",
+      sexo                   ~ "Sexo",
+      etiologia_agrupada     ~ "Etiología de la ERC",
+      diabetes               ~ "Diabetes mellitus",
+      hipertension           ~ "Hipertensión arterial",
+      imc_calculado          ~ "IMC (kg/m²)",
+      tfg_ml_min_basal       ~ "TFG estimada (mL/min/1.73m²)",
+      hemoglobina_g_dl_basal ~ "Hemoglobina (g/dL)",
+      albumina_g_dl_basal    ~ "Albúmina sérica (g/dL)",
+      proteinuria_mg_g_basal ~ "Proteinuria (mg/g creatinina)",
+      ieca_o_ara2            ~ "Uso de IECA o ARA2",
+      n_medicamentos_totales ~ "N.° de medicamentos"
+    )
+  ) %>%
+  add_overall(last = TRUE) %>%
+  add_p(test = list(all_continuous()  ~ "kruskal.test",
+                    all_categorical() ~ "chisq.test")) %>%
+  modify_caption("**Tabla 1. Características basales de la cohorte por estadio de ERC**") %>%
+  modify_footnote(all_stat_cols() ~
+    "Mediana (RIQ) para continuas; n (%) para categóricas. p: Kruskal-Wallis / chi-cuadrado.") %>%
+  bold_labels()
+
+tabla_1
+```
+
+```{r, fig.width=8, fig.height=10}
+colores_estadio <- c("G2"="#93C6E0","G3a"="#4A90D9","G3b"="#2E75B6","G4"="#1F5C99")
+
+fig_tfg <- base %>%
+  ggplot(aes(x=estadio_basal, y=tfg_ml_min_basal, fill=estadio_basal)) +
+  geom_violin(alpha=0.6, trim=FALSE) +
+  geom_boxplot(width=0.12, fill="white", outlier.shape=21) +
+  scale_fill_manual(values=colores_estadio) +
+  labs(title="A. TFG estimada por estadio basal",
+       x="Estadio de ERC", y="TFG (mL/min/1.73m²)") +
+  theme_minimal(base_size=12) +
+  theme(legend.position="none")
+
+fig_declive <- base %>%
+  filter(!is.na(tasa_declive_tfg)) %>%
+  ggplot(aes(x=estadio_basal, y=tasa_declive_tfg, fill=estadio_basal)) +
+  geom_hline(yintercept=0, linetype="dashed", color="gray50") +
+  geom_violin(alpha=0.6, trim=FALSE) +
+  geom_boxplot(width=0.12, fill="white", outlier.shape=21) +
+  scale_fill_manual(values=colores_estadio) +
+  labs(title="B. Tasa de declive de TFG por estadio basal",
+       x="Estadio de ERC", y="Declive (mL/min/año)") +
+  theme_minimal(base_size=12) +
+  theme(legend.position="none")
+
+figura_1 <- fig_tfg / fig_declive +
+  plot_annotation(title = "Figura 1. TFG basal y tasa de declive de la TFG por estadio de ERC")
+figura_1
+```
+
+## Seguimiento y desenlace
+
+Durante los 24 meses de seguimiento, `r sum(base$perdida_seguimiento_m24, na.rm=TRUE)`
+participantes (`r round(mean(base$perdida_seguimiento_m24, na.rm=TRUE)*100,1)`%)
+se perdieron durante el seguimiento. El desenlace primario ocurrió en
+`r sum(base$progresion_g5_o_trr, na.rm=TRUE)` participantes
+(`r round(mean(base$progresion_g5_o_trr, na.rm=TRUE)*100,1)`%).
+
+```{r, fig.width=9, fig.height=7}
+km_figura <- ggsurvplot(
+  km_estadio,
+  data              = base_surv,
+  pval              = TRUE,
+  pval.coord        = c(560, 0.85),
+  pval.size         = 4,
+  conf.int          = TRUE,
+  conf.int.alpha    = 0.12,
+  risk.table        = TRUE,
+  risk.table.height = 0.25,
+  risk.table.title  = "Participantes en riesgo",
+  fontsize          = 4,
+  palette           = c("#93C6E0","#4A90D9","#2E75B6","#1F5C99"),
+  legend.labs       = c("G2","G3a","G3b","G4"),
+  legend.title      = "Estadio de ERC",
+  legend            = c(0.15, 0.25),
+  xlab              = "Tiempo desde el reclutamiento (días)",
+  ylab              = "Probabilidad libre de progresión a G5/TRR",
+  title             = "Figura 2. Curvas de Kaplan-Meier por estadio basal de ERC",
+  ggtheme           = theme_minimal(base_size = 13)
+)
+km_figura
+
+mediana_g4 <- surv_median(km_estadio) %>%
+  filter(strata == "estadio_basal=G4") %>% pull(median)
+primer_evento_g4 <- min(base_surv$tiempo_seguimiento_dias[
+  base_surv$progresion_g5_o_trr & base_surv$estadio_basal == "G4"])
+```
+
+Los eventos se distribuyeron así: G2 `r ev("G2")` de `r nn("G2")`, G3a
+`r ev("G3a")` de `r nn("G3a")`, G3b `r ev("G3b")` de `r nn("G3b")` y G4
+`r ev("G4")` de `r nn("G4")`. La curva de G4 se separa de las demás desde el
+primer evento (día `r primer_evento_g4`) y cae durante todo el seguimiento; su
+tiempo mediano hasta la progresión fue de `r mediana_g4` días. A los 720 días,
+la probabilidad de seguir libre de progresión fue
+`r num(s720["G4"])`% en G4 (IC 95% `r num(s720_lo["G4"])`-`r num(s720_hi["G4"])`)
+y `r num(s720["G3b"])`% en G3b; las curvas de G2 y G3a son planas porque no
+tuvieron eventos. La prueba de log-rank rechazó la igualdad de las curvas
+(chi-cuadrado = `r num(logrank$chisq)`, `r length(logrank$n) - 1` gl,
+`r p_txt(p_logrank)`).
+
+## Factores asociados a la progresión
+
+### Regresión logística
+
+```{r}
+tabla_2 <- tbl_merge(
+  list(
+    # Modelo crudo
+    # (bold_p se aplica a cada tabla antes de unirlas: en gtsummary 2.6,
+    # bold_p() sobre una tabla unida con tbl_merge() da error)
+    glm(progresion_g5_o_trr ~ estadio_basal,
+        data = base_log, family = binomial()) %>%
+      tbl_regression(
+        exponentiate = TRUE,
+        tidy_fun = tidy_wald,
+        include = "estadio_basal",
+        label   = list(estadio_basal ~ "Estadio de ERC (ref: G2)")
+      ) %>%
+      modify_header(estimate ~ "**OR**", conf.low ~ "**IC 95%**") %>%
+      bold_p(t = 0.05),
+
+    # Modelo ajustado
+    modelo_log %>%
+      tbl_regression(
+        exponentiate = TRUE,
+        tidy_fun = tidy_wald,
+        show_single_row = c(sexo, diabetes, hipertension),
+        label = list(
+          estadio_basal          ~ "Estadio de ERC (ref: G2)",
+          edad                   ~ "Edad (por año)",
+          sexo                   ~ "Sexo masculino (ref: femenino)",
+          diabetes               ~ "Diabetes mellitus",
+          hipertension           ~ "Hipertensión arterial",
+          log_proteinuria_basal  ~ "Log-proteinuria (por unidad)",
+          hemoglobina_g_dl_basal ~ "Hemoglobina (por g/dL)"
+        )
+      ) %>%
+      modify_header(estimate ~ "**OR ajustado**", conf.low ~ "**IC 95%**") %>%
+      bold_p(t = 0.05)
+  ),
+  tab_spanner = c("**Modelo crudo**", "**Modelo ajustado**")
+) %>%
+  bold_labels() %>%
+  modify_caption("**Tabla 2. Odds Ratios para progresión a G5/TRR (máxima verosimilitud)**") %>%
+  modify_source_note("IC de Wald. Los OR de G3a, G3b y G4 no son estimables: G2 no tiene eventos (separación). Ver la Tabla 4.")
+
+tabla_2
+
+or_ml <- tidy_wald(modelo_log, exponentiate = TRUE)
+or_hta <- or_ml %>% filter(term == "hipertensionTRUE")
+```
+
+Los OR crudos y ajustados del estadio no se pueden interpretar como
+magnitudes: G2 no tiene eventos y los OR de G3b y G4 tienden a infinito, con
+intervalos de 0 a infinito, tanto antes como después del ajuste. El ajuste no
+cambia ese patrón. Entre las covariables, edad, sexo, diabetes,
+log-proteinuria y hemoglobina no muestran asociación independiente. La
+hipertensión aparece con un OR de
+`r ic(or_hta$estimate, or_hta$conf.low, or_hta$conf.high, 2)`, un efecto
+protector que no es plausible y que no se reproduce en el modelo de Cox; se
+atribuye a la inestabilidad de un modelo con `r num(epv)` eventos por
+variable.
+
+### Modelo de Cox
+
+```{r}
+tabla_3 <- tbl_merge(
+  list(
+    coxph(Surv(tiempo_seguimiento_dias, progresion_g5_o_trr) ~ estadio_basal,
+          data = base_surv) %>%
+      tbl_regression(
+        exponentiate = TRUE,
+        tidy_fun = tidy_wald,
+        include = "estadio_basal",
+        label   = list(estadio_basal ~ "Estadio de ERC (ref: G2)")
+      ) %>%
+      modify_header(estimate ~ "**HR**", conf.low ~ "**IC 95%**") %>%
+      bold_p(t = 0.05),
+
+    modelo_cox %>%
+      tbl_regression(
+        exponentiate = TRUE,
+        tidy_fun = tidy_wald,
+        show_single_row = c(sexo, diabetes, hipertension),
+        label = list(
+          estadio_basal          ~ "Estadio de ERC (ref: G2)",
+          edad                   ~ "Edad (por año)",
+          sexo                   ~ "Sexo masculino (ref: femenino)",
+          diabetes               ~ "Diabetes mellitus",
+          hipertension           ~ "Hipertensión arterial",
+          log_proteinuria_basal  ~ "Log-proteinuria (por unidad)",
+          hemoglobina_g_dl_basal ~ "Hemoglobina (por g/dL)"
+        )
+      ) %>%
+      modify_header(estimate ~ "**HR ajustado**", conf.low ~ "**IC 95%**") %>%
+      bold_p(t = 0.05)
+  ),
+  tab_spanner = c("**Modelo crudo**", "**Modelo ajustado**")
+) %>%
+  bold_labels() %>%
+  modify_caption("**Tabla 3. Hazard Ratios para progresión a G5/TRR — Modelo de Cox (máxima verosimilitud)**") %>%
+  modify_source_note("IC de Wald. Los HR de G3a, G3b y G4 no son estimables: G2 no tiene eventos (separación). Ver la Tabla 4.")
+
+tabla_3
+
+hr_ml <- tidy_wald(modelo_cox, exponentiate = TRUE)
+hr_hb <- hr_ml %>% filter(term == "hemoglobina_g_dl_basal")
+```
+
+El modelo de Cox reproduce el patrón del logístico: los HR del estadio no son
+finitos y ninguna covariable se asocia de forma independiente con el tiempo
+hasta la progresión. La hipertensión ya no tiene un efecto protector
+significativo. La covariable más cercana a la significación es la hemoglobina,
+con un HR de `r ic(hr_hb$estimate, hr_hb$conf.low, hr_hb$conf.high, 2)` por
+g/dL (`r p_txt(hr_hb$p.value)`). Los HR de las covariables son, como los OR,
+cercanos a 1 y con intervalos que incluyen el 1; la excepción en el modelo
+logístico es la hipertensión.
+
+### Efecto del estadio con regularización de Firth
+
+```{r}
+etiquetas <- c(
+  estadio_basalG3a        = "Estadio G3a (ref: G2)",
+  estadio_basalG3b        = "Estadio G3b (ref: G2)",
+  estadio_basalG4         = "Estadio G4 (ref: G2)",
+  edad                    = "Edad (por año)",
+  sexoMasculino           = "Sexo masculino (ref: femenino)",
+  diabetesTRUE            = "Diabetes mellitus",
+  hipertensionTRUE        = "Hipertensión arterial",
+  log_proteinuria_basal   = "Log-proteinuria (por unidad)",
+  hemoglobina_g_dl_basal  = "Hemoglobina (por g/dL)"
+)
+fmt_ic <- function(lo, hi) paste0(num(lo, 2), "-", num(hi, 2))
+fmt_p  <- function(p) ifelse(p < 0.001, "<0.001", num(p, 3))
+
+tabla_4_df <- left_join(
+  firth_log %>% transmute(term,
+                          OR = num(estimate, 2),
+                          `IC 95% (OR)` = fmt_ic(conf.low, conf.high),
+                          `p (OR)` = fmt_p(p.value)),
+  firth_cox %>% transmute(term,
+                          HR = num(estimate, 2),
+                          `IC 95% (HR)` = fmt_ic(conf.low, conf.high),
+                          `p (HR)` = fmt_p(p.value)),
+  by = "term"
+) %>%
+  mutate(term = etiquetas[term]) %>%
+  rename(Variable = term)
+
+tabla_4 <- flextable(tabla_4_df) %>%
+  add_header_row(values = c("", "Regresión logística (Firth)", "Modelo de Cox (Firth)"),
+                 colwidths = c(1, 3, 3)) %>%
+  set_caption("Tabla 4. OR y HR ajustados con regularización de Firth") %>%
+  add_footer_lines("IC y valores p por perfil de verosimilitud penalizada. Mismas covariables que las Tablas 2 y 3.") %>%
+  bold(part = "header") %>%
+  autofit()
+
+tabla_4
+```
+
+Con la regularización de Firth, G4 tuvo un OR de
+`r ic(or_g4$estimate, or_g4$conf.low, or_g4$conf.high)` y un HR de
+`r ic(hr_g4$estimate, hr_g4$conf.low, hr_g4$conf.high)` frente a G2; G3a y G3b
+no difirieron de G2. Los intervalos son muy amplios porque la categoría de
+referencia no tiene eventos: lo que se puede afirmar es que el riesgo en G4 es
+muy superior y que el límite inferior está lejos de 1, no el valor puntual. El
+OR es mayor que el HR, como se espera cuando el desenlace es frecuente en el
+grupo expuesto (`r pct(base$progresion_g5_o_trr[base$estadio_basal == "G4"])`%
+en G4). Las estimaciones de las covariables son similares a las de máxima
+verosimilitud.
+
+### Regresión lineal: tasa de declive de la TFG
+
+```{r}
+tabla_5 <- modelo_lineal %>%
+  tbl_regression(
+    show_single_row = c(sexo, diabetes, hipertension, ieca_o_ara2),
+    label = list(
+      estadio_basal          ~ "Estadio de ERC (ref: G2)",
+      edad                   ~ "Edad (por año)",
+      sexo                   ~ "Sexo masculino (ref: femenino)",
+      diabetes               ~ "Diabetes mellitus",
+      hipertension           ~ "Hipertensión arterial",
+      log_proteinuria_basal  ~ "Log-proteinuria (por unidad)",
+      hemoglobina_g_dl_basal ~ "Hemoglobina (por g/dL)",
+      pas_mmhg_basal         ~ "PAS (por mmHg)",
+      ieca_o_ara2            ~ "IECA o ARA2"
+    )
+  ) %>%
+  modify_header(estimate ~ "**Coeficiente (mL/min/año)**") %>%
+  bold_p(t = 0.05) %>%
+  bold_labels() %>%
+  modify_caption("**Tabla 5. Coeficientes ajustados para la tasa de declive de la TFG**")
+
+tabla_5
+
+b_g4   <- b_lin("estadio_basalG4")
+b_dm   <- b_lin("diabetesTRUE")
+b_ieca <- b_lin("ieca_o_ara2TRUE")
+```
+
+Entre los `r nrow(base_lineal)` participantes con TFG al mes 24, la mediana del
+declive fue `r median(base_lineal$tasa_declive_tfg)` mL/min/año (Figura 1B). G4
+declinó `r num(abs(b_g4$estimate))` mL/min/año más rápido que G2
+(IC 95% `r num(b_g4$conf.low)` a `r num(b_g4$conf.high)`), mientras que G3a y
+G3b declinaron al mismo ritmo. La diabetes se asoció con un declive
+`r num(abs(b_dm$estimate))` mL/min/año más rápido
+(IC 95% `r num(b_dm$conf.low)` a `r num(b_dm$conf.high)`) y el uso de IECA o
+ARA2 con uno `r num(abs(b_ieca$estimate))` mL/min/año más rápido
+(IC 95% `r num(b_ieca$conf.low)` a `r num(b_ieca$conf.high)`). El modelo
+explica el `r num(summary(modelo_lineal)$r.squared * 100)`% de la variabilidad
+del declive.
+
+## Análisis de sensibilidad
+
+```{r}
+# Sensibilidad 1: excluir a los participantes con valores corregidos
+or_g4_s1 <- tidy_firth(logistf(formula_log, data = filter(base_log, !revision_manual))) %>%
+  filter(term == "estadio_basalG4")
+
+# Sensibilidad 2: desenlace alternativo (registrado o TFG < 15 al mes 12 o 24)
+base_s2 <- base_log %>%
+  mutate(progresion_alt = progresion_g5_o_trr |
+           coalesce(tfg_ml_min_m12 < 15, FALSE) |
+           coalesce(tfg_ml_min_m24 < 15, FALSE))
+firth_s2 <- tidy_firth(logistf(update(formula_log, progresion_alt ~ .), data = base_s2))
+or_g4_s2 <- firth_s2 %>% filter(term == "estadio_basalG4")
+or_dm_s2 <- firth_s2 %>% filter(term == "diabetesTRUE")
+or_dm    <- firth_log %>% filter(term == "diabetesTRUE")
+nuevos_s2 <- base_s2 %>% filter(progresion_alt & !progresion_g5_o_trr)
+
+# Sensibilidad 4: G4 frente a G2-G3b con máxima verosimilitud
+modelo_s4 <- glm(update(formula_log, . ~ . - estadio_basal + I(estadio_basal == "G4")),
+                 data = base_log, family = binomial())
+or_g4_s4 <- tidy_wald(modelo_s4, exponentiate = TRUE) %>%
+  filter(grepl("G4", term))
+```
+
+La asociación de G4 con la progresión se mantuvo en los cuatro análisis de
+sensibilidad (detalle en `code/07_validacion_resultados.html`). Al excluir a
+los 11 participantes con valores corregidos en la limpieza, el OR de Firth de
+G4 fue `r ic(or_g4_s1$estimate, or_g4_s1$conf.low, or_g4_s1$conf.high)`. Con
+la definición alternativa del desenlace, que agrega `r nrow(nuevos_s2)` eventos
+en G4 no registrados como progresión, fue
+`r ic(or_g4_s2$estimate, or_g4_s2$conf.low, or_g4_s2$conf.high)`. Con G2-G3b
+como referencia y máxima verosimilitud, fue
+`r ic(or_g4_s4$estimate, or_g4_s4$conf.low, or_g4_s4$conf.high)`. Las
+covariables fueron menos estables: los `r nrow(nuevos_s2)` eventos agregados
+corresponden a pacientes con diabetes (`r sum(nuevos_s2$diabetes)` de
+`r nrow(nuevos_s2)`), y con esa definición el OR de la diabetes pasó de
+`r ic(or_dm$estimate, or_dm$conf.low, or_dm$conf.high, 2)` a
+`r ic(or_dm_s2$estimate, or_dm_s2$conf.low, or_dm_s2$conf.high, 2)`.
+
+# Discusión
+
+El hallazgo principal es que el estadio de ERC al reclutamiento, y en
+particular el estadio G4, es el predictor dominante de progresión a G5 o TRR en
+24 meses. `r ev("G4")` de los `r sum(base$progresion_g5_o_trr)` eventos
+ocurrieron en G4, y los tres modelos coinciden: mayor odds, mayor riesgo
+instantáneo y un declive más rápido de la TFG. Que G3a y G3b no difieran de G2
+también es coherente con la definición del desenlace. Un paciente en G3b, con
+una TFG de 30 a 44, necesitaría perder más de 15 mL/min/1.73 m² en dos años
+para llegar a G5, es decir, al menos 7.5 mL/min/1.73 m² por año, muy por
+encima del declive mediano observado de
+`r abs(median(base_lineal$tasa_declive_tfg))` mL/min/año.
+
+Este resultado es consistente con la clasificación KDIGO, que asocia el
+riesgo de falla renal con la categoría de TFG, y con los modelos de predicción
+de falla renal, en los que la TFG basal es uno de los predictores más fuertes.
+En cambio, la proteinuria, un predictor bien establecido de progresión en la
+literatura, no se asoció con el desenlace una vez ajustado por el estadio. Con
+un horizonte de 24 meses y un desenlace definido por un umbral de TFG, la
+distancia inicial al umbral domina la predicción y deja poco margen para
+detectar efectos de otras variables con `r sum(base$progresion_g5_o_trr)`
+eventos.
+
+Hubo tres hallazgos inesperados. La hipertensión arterial apareció como
+protectora en el modelo logístico, pero el
+`r pct(base$hipertension)`% de la cohorte es hipertensa y el efecto
+desaparece en el modelo de Cox, así que se interpreta como inestabilidad del
+modelo. El uso de IECA o ARA2 se asoció con un declive más rápido, al
+contrario de su efecto nefroprotector; en un estudio observacional esto
+sugiere confusión por indicación, porque estos fármacos se prescriben a
+pacientes con enfermedad más activa. La diabetes se asoció con un declive más
+rápido pero no con el desenlace registrado; con la definición alternativa sí
+se asoció, porque los `r nrow(nuevos_s2)` posibles eventos no registrados
+ocurrieron en diabéticos. Esto sugiere un subregistro diferencial del
+desenlace que habría que verificar en la fuente.
+
+Para la práctica clínica, estos resultados apoyan el seguimiento estrecho y la
+preparación temprana para TRR de los pacientes que ingresan en G4, cuya
+probabilidad de progresar en dos años, estimada por Kaplan-Meier, es del
+`r num(100 - s720["G4"])`%. En G2 a G3b, el desenlace a
+24 meses es poco informativo, y la tasa de declive de la TFG es un indicador
+más útil para identificar a quienes avanzan más rápido, como los diabéticos.
+
+# Limitaciones
+
+- El diseño de cohorte permite establecer asociaciones temporales pero no
+  causalidad.
+- Ningún participante en G2 o G3a presentó el desenlace. Los OR y HR del
+  estadio solo son estimables con métodos penalizados y son muy imprecisos;
+  con `r num(epv)` eventos por variable, las estimaciones de las covariables
+  cambian al excluir pocos participantes y deben leerse como exploratorias.
+- Los datos faltantes de la TFG al mes 24 (`r nrow(base) - nrow(base_lineal)`
+  participantes, `r num((nrow(base) - nrow(base_lineal)) / nrow(base) * 100)`%)
+  se manejaron con análisis de casos completos en el modelo lineal, lo que
+  asume que son completamente al azar (MCAR). Los excluidos se parecen a los
+  incluidos en sus características basales.
+- `r nrow(nuevos_s2)` participantes de G4 alcanzaron una TFG < 15 sin desenlace
+  registrado. Si fueron progresiones no registradas, el desenlace principal
+  subestima la asociación de la diabetes.
+- La asociación de los IECA o ARA2 con el declive puede deberse a confusión por
+  indicación, que no se puede controlar con las variables disponibles.
+- La base de datos es sintética y fue generada con distribuciones estadísticas
+  realistas pero no proviene de participantes reales.
+
+# Conclusiones
+
+En esta cohorte de `r nrow(base)` pacientes con ERC, el estadio G4 al
+reclutamiento es el principal factor basal asociado con la progresión a G5 o
+TRR en 24 meses: el `r pct(base$progresion_g5_o_trr[base$estadio_basal == "G4"])`%
+de G4 progresó, frente a `r ev("G3b")` participante en G3b y ninguno en G2 o
+G3a. Ninguna otra característica basal se asoció de forma estable con la
+progresión; la diabetes se asoció con un declive más rápido de la TFG y su
+relación con el desenlace depende de cómo se defina este.
+
+---
+
+# Exportación de tablas y figuras
+
+Las tablas y figuras se exportan desde los mismos objetos que muestra este
+reporte, de modo que lo exportado coincide con lo publicado aquí.
+
+```{r exportar, echo=TRUE}
+dir.create(here("output", "tables"),  showWarnings = FALSE, recursive = TRUE)
+dir.create(here("output", "figures"), showWarnings = FALSE, recursive = TRUE)
+
+# === EXPORTAR TABLAS ===
+tabla_1 %>%
+  as_flex_table() %>%
+  save_as_docx(path = here("output", "tables", "tabla_01_caracteristicas_basales.docx"))
+
+tabla_2 %>%
+  as_flex_table() %>%
+  save_as_docx(path = here("output", "tables", "tabla_02_or_ajustados.docx"))
+
+tabla_3 %>%
+  as_flex_table() %>%
+  save_as_docx(path = here("output", "tables", "tabla_03_hr_ajustados.docx"))
+
+tabla_4 %>%
+  save_as_docx(path = here("output", "tables", "tabla_04_or_hr_firth.docx"))
+
+tabla_5 %>%
+  as_flex_table() %>%
+  save_as_docx(path = here("output", "tables", "tabla_05_declive_tfg.docx"))
+
+# === EXPORTAR FIGURAS (300 DPI) ===
+ggsave(
+  filename = here("output", "figures", "figura_01_tfg_declive_estadio.png"),
+  plot     = figura_1,
+  width = 8, height = 10, dpi = 300, bg = "white"
+)
+
+# ggsurvplot combina la curva y la tabla de riesgo; se imprime en un
+# dispositivo PNG para conservar ambas.
+png(here("output", "figures", "figura_02_kaplan_meier.png"),
+    width = 9, height = 7, units = "in", res = 300)
+print(km_figura)
+invisible(dev.off())
+
+# Verificación de lo exportado
+productos <- c(list.files(here("output", "tables"),  pattern = "^tabla_0[1-5].*docx$", full.names = TRUE),
+               list.files(here("output", "figures"), pattern = "^figura_0[12].*png$",   full.names = TRUE))
+tibble(Archivo = basename(productos),
+       `Tamaño (KB)` = round(file.size(productos) / 1024, 1),
+       Modificado = format(file.mtime(productos), "%Y-%m-%d %H:%M")) %>%
+  knitr::kable(caption = "Productos exportados en output/")
+```
+
+# Información de sesión
+
+```{r, echo=TRUE}
+sessioninfo::session_info()
+```
