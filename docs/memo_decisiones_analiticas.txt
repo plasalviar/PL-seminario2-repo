@@ -94,3 +94,61 @@ la progresión de la ERC en pacientes con estadios G2-G4?
   Evaluar alternativas para la separación y el bajo EPV: el material del
   curso propone reducir el número de covariables o usar métodos de
   regularización.
+
+═══════════════════════════════════════════════════
+6. DECISIONES TRAS LA VALIDACIÓN (semana 15)
+═══════════════════════════════════════════════════
+Documento: code/07_validacion_resultados.Rmd
+Actualización: 24/11/2026
+
+  6.1 ESTIMACIÓN DEL EFECTO DEL ESTADIO: REGULARIZACIÓN DE FIRTH
+  Reducir covariables no resuelve la separación: el modelo crudo, con el
+  estadio como única variable, tampoco tiene OR finitos. Se usa la
+  regresión penalizada de Firth (paquetes logistf y coxphf), un método de
+  regularización que conserva la exposición, la referencia G2 y las
+  covariables del plan. IC y valores p por perfil de verosimilitud
+  penalizada.
+  - Logístico, G4 vs G2: OR 239.84 (IC 95% 29.07-31,761.49)
+  - Cox, G4 vs G2: HR 147.94 (IC 95% 20.40-18,828.53)
+  - G3a y G3b no difieren de G2 en ningún modelo.
+  En el reporte final, los modelos de máxima verosimilitud del plan se
+  presentan tal como están (Tablas 2 y 3) y los de Firth en una tabla
+  adicional que da la estimación interpretable del estadio. La magnitud
+  exacta es imprecisa y se cita siempre con su intervalo.
+
+  6.2 COVARIABLES: RESULTADOS EXPLORATORIOS
+  Se mantienen las covariables pre-especificadas (no se eliminan por
+  significación). Sus estimaciones no son robustas: 5 de 6 cambian 10% o
+  más al excluir a los 11 participantes con revisión manual, porque casi
+  toda la información proviene de los 53 participantes de G4. Se
+  presentan como exploratorias.
+
+  6.3 ANÁLISIS DE SENSIBILIDAD REALIZADOS
+  S1. La sensibilidad de la guía (excluir creatinina > 15 mg/dL) no
+      aplica: ese valor (18.5) se corrigió a 2.86 en la limpieza. Se
+      reemplaza por excluir a los 11 participantes con revision_manual.
+      G4 se mantiene (OR Firth 419.86, IC 46.34-56,715.49).
+  S2. Desenlace alternativo: progresión registrada o TFG < 15 al mes 12
+      o 24. Agrega 6 eventos, todos en G4 y todos en diabéticos. G4 se
+      mantiene; el OR de la diabetes pasa de 1.04 (p = 0.95) a 4.82
+      (p = 0.04). Posible subregistro diferencial del desenlace en
+      diabéticos; se discute en el reporte final.
+  S3. Regularización de Firth (ver 6.1).
+  S4. G4 frente a G2-G3b con máxima verosimilitud: converge, OR 850.19
+      (IC 70.90-10,195.47). Solo como comprobación, porque cambia la
+      exposición del plan.
+
+  6.4 SUPUESTOS VERIFICADOS EN LA VALIDACIÓN
+  - Linealidad en la escala logit: sin desviación (splines naturales de
+    3 gl, razón de verosimilitud p = 0.498).
+  - Lineal: Breusch-Pagan p = 0.573; Shapiro-Wilk p = 0.998. No se usan
+    errores robustos ni transformación del desenlace.
+  - Cox: sin violación de riesgos proporcionales. Log-proteinuria muestra
+    una tendencia creciente leve en los residuos de Schoenfeld
+    (p = 0.066), sin acción.
+
+  6.5 HALLAZGOS QUE NO SE INTERPRETAN COMO EFECTOS
+  - Hipertensión con OR < 1 en el modelo logístico: inestabilidad del
+    modelo (86% de hipertensos, 33 eventos); no se reproduce en Cox.
+  - IECA o ARA2 asociado con declive más rápido: probable confusión por
+    indicación.
